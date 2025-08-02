@@ -664,16 +664,14 @@ export default function App() {
           // Convert to AI Voice using speech-to-text first
           console.log('Converting speech to text...');
           
-          const arrayBuffer = await audioBlob.arrayBuffer();
-          const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-          
+          const audioBlob = new Blob(recordedChunks, { type: 'audio/mp4' });
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'audio.mp4');
+
           // Call speech-to-text API
           const sttResponse = await fetch('/api/speech-to-text', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ audioData: base64Audio }),
+            body: formData,
           });
           
           if (!sttResponse.ok) {
@@ -722,17 +720,14 @@ export default function App() {
         // Convert recorded audio to text using speech-to-text
         try {
           const audioBlob = new Blob(recordedChunks, { type: 'audio/mp4' });
-          const arrayBuffer = await audioBlob.arrayBuffer();
-          const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-          
-          console.log('[DEBUG] Created audioBlob, size:', audioBlob.size);
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'audio.mp4');
+
+          console.log('[DEBUG] Created audioBlob and formData for STT');
           
           const sttResponse = await fetch('/api/speech-to-text', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ audioData: base64Audio }),
+            body: formData,
           });
           
           if (!sttResponse.ok) {

@@ -1,4 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { IncomingForm, File } from 'formidable';
+import fs from 'fs';
+import FormData from 'form-data';
+import fetch from 'node-fetch';
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -6,54 +16,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { audioData } = req.body;
-
-    if (!audioData) {
-      return res.status(400).json({ error: 'Audio data is required' });
-    }
-
-    console.log('Received audio data, length:', audioData.length);
-
-    // Convert base64 audio data to buffer
-    const audioBuffer = Buffer.from(audioData, 'base64');
-    console.log('Audio buffer size:', audioBuffer.length);
-
-    // Use OpenAI Whisper API for speech-to-text
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
       console.error('OpenAI API key not found in environment');
       return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
 
-    // Create boundary for multipart form data
-    const boundary = '----WebKitFormBoundary' + Math.random().toString(16).substr(2);
+    const form = new IncomingForm();
     
-    // Build multipart form data manually
-    let formData = '';
-    formData += `--${boundary}\r\n`;
-    formData += 'Content-Disposition: form-data; name="file"; filename="audio.mp4"\r\n';
-    formData += 'Content-Type: audio/mp4\r\n\r\n';
+    const [fields, files] = await form.parse(req);
     
-    // Add the audio buffer
-    const audioPart = Buffer.concat([
-      Buffer.from(formData, 'utf8'),
-      audioBuffer,
-      Buffer.from(`\r\n--${boundary}\r\n`, 'utf8'),
-      Buffer.from('Content-Disposition: form-data; name="model"\r\n\r\n', 'utf8'),
-      Buffer.from('whisper-1', 'utf8'),
-      Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
-    ]);
+    const audioFile = (files.file as File[])[0];
 
+    if (!audioFile) {
+      return res.status(400).json({ error: 'No audio file uploaded' });
+    }
+
+    console.log('Received audio file:', audioFile.originalFilename, 'Size:', audioFile.size);
+
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(audioFile.filepath), audioFile.originalFilename || 'audio.mp4');
+    formData.append('model', 'whisper-1');
+    
     console.log('Sending request to OpenAI Whisper API...');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': audioPart.length.toString(),
+        ...formData.getHeaders(),
       },
-      body: audioPart,
+      body: formData,
     });
 
     console.log('OpenAI API response status:', response.status);
@@ -68,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('Speech recognition result:', result);
 
     res.status(200).json({ 
-      text: result.text,
+      text: (result as any).text,
       success: true 
     });
 
@@ -76,4 +69,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Speech-to-text error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-} 
+}
