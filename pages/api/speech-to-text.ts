@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('Audio buffer size:', audioBuffer.length);
 
     // Use OpenAI Whisper API for speech-to-text
-    const openaiApiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
       console.error('OpenAI API key not found in environment');
       return res.status(500).json({ error: 'OpenAI API key not configured' });
