@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import ModelViewer from "@/components/ModelViewer";
 import AppHeader from "../components/AppHeader";
@@ -55,8 +55,10 @@ export default function App() {
   const [isChatRecording, setIsChatRecording] = useState(false);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [chatRecordedAudioUrl, setChatRecordedAudioUrl] = useState<string | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [recordingMimeType, setRecordingMimeType] = useState<string>('');
+
 
   // Mock data
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -542,7 +544,6 @@ export default function App() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // Try to find the best supported MIME type
       const mimeTypes = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -551,7 +552,7 @@ export default function App() {
         'audio/wav'
       ];
       
-      let selectedMimeType = null;
+      let selectedMimeType: string | null = null;
       for (const mimeType of mimeTypes) {
         if (typeof window !== 'undefined' && window.MediaRecorder && MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
@@ -560,12 +561,15 @@ export default function App() {
       }
       
       if (!selectedMimeType) {
+        alert('Your browser does not support any of the required audio recording formats.');
         throw new Error('No supported audio MIME type found');
       }
       
       console.log('Using MIME type for recording:', selectedMimeType);
+      setRecordingMimeType(selectedMimeType);
       
       const recorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
+      mediaRecorderRef.current = recorder;
       const chunks: Blob[] = [];
       
       recorder.ondataavailable = (event) => {
@@ -574,442 +578,154 @@ export default function App() {
         }
       };
       
-                  recorder.onstop = () => {
-              const blob = new Blob(chunks, { type: selectedMimeType });
-              const audioUrl = URL.createObjectURL(blob);
-              setRecordedAudioUrl(audioUrl);
-              setRecordedChunks(chunks);
-              console.log('Recording stopped, audio URL created:', audioUrl, 'Size:', blob.size, 'Type:', selectedMimeType);
-              console.log('🎤 Send Voice button should now be ENABLED!');
-            };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: selectedMimeType! });
+        const audioUrl = URL.createObjectURL(blob);
+        setRecordedAudioUrl(audioUrl);
+        setRecordedChunks(chunks);
+        console.log('Recording stopped, audio URL created:', audioUrl, 'Size:', blob.size, 'Type:', selectedMimeType);
+      };
       
       recorder.start();
-      setMediaRecorder(recorder);
       setIsRecording(true);
-      console.log('Recording started with MIME type:', selectedMimeType);
     } catch (error) {
       console.error('Error starting recording:', error);
+      alert(`Could not start recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
-      setMediaRecorder(null);
       console.log('Recording stopped');
     }
   };
 
-    const playRecordedAudio = async () => {
-    if (recordedAudioUrl && voiceTarget && recordedChunks.length > 0) {
-      console.log('🎤 Converting your recording to AI Voice for', voiceTarget);
-      
-      // Get the user's selected voice from localStorage
-      const selectedVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
-      console.log('Selected voice from localStorage:', selectedVoice);
-      console.log('Your profile - Name: You, Selected voice:', selectedVoice);
-      
-      try {
-        // Convert recorded chunks to blob
-        const audioBlob = new Blob(recordedChunks, { type: 'audio/mp4' });
-        
-        // Get voice effect details from voiceProcessingService
-        const { voiceProcessingService } = await import('../lib/voiceProcessing');
-        const availableEffects = voiceProcessingService.getAvailableEffects();
-        const selectedEffect = availableEffects.find(effect => effect.id === selectedVoice);
-        
-        if (!selectedEffect) {
-          throw new Error(`Voice effect not found: ${selectedVoice}`);
-        }
-        
-        console.log('Selected voice effect:', selectedEffect);
-        
-        if (selectedEffect.apiProvider === 'local') {
-          // For local voices, just play the original audio with pitch effect
-          console.log('🎵 Using LOCAL voice processing for:', selectedEffect.name);
-          
-          // Create audio context for pitch shifting
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-          
-          // Convert blob to array buffer
-          const arrayBuffer = await audioBlob.arrayBuffer();
-          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-          
-          // Create source from the original audio
-          const source = audioContext.createBufferSource();
-          source.buffer = audioBuffer;
-          
-          const pitchSettings = voiceProcessingService.getPitchSettings(selectedEffect.id);
-          source.playbackRate.value = pitchSettings.playbackRate;
-          
-          // Create gain node for volume control
-          const gainNode = audioContext.createGain();
-          gainNode.gain.value = 1.0;
-          
-          // Connect the audio chain
-          source.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          
-          // Play the pitch-shifted original audio
-          source.start(0);
-          
-          console.log(`🎵 Playing original audio with ${selectedEffect.name} pitch shift (${pitchSettings.playbackRate}x)`);
-          
-        } else if (selectedEffect.apiProvider === 'elevenlabs') {
-          // Use ElevenLabs API
-          console.log('🔊 Using ElevenLabs API for:', selectedEffect.name);
-          
-          // Convert to AI Voice using speech-to-text first
-          console.log('Converting speech to text...');
-          
-          const audioBlob = new Blob(recordedChunks, { type: 'audio/mp4' });
-          const formData = new FormData();
-          formData.append('file', audioBlob, 'audio.mp4');
-
-          // Call speech-to-text API
-          const sttResponse = await fetch('/api/speech-to-text', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (!sttResponse.ok) {
-            throw new Error('Speech-to-text failed');
-          }
-          
-          const sttResult = await sttResponse.json();
-          const recognizedText = sttResult.text;
-          
-          console.log('Recognized text:', recognizedText);
-          console.log('Using ElevenLabs voice ID:', selectedEffect.voiceId);
-          
-          // Play the AI-generated voice with the recognized text
-          await speakWithElevenLabs(recognizedText, selectedEffect.voiceId!);
-          console.log('✅ ElevenLabs AI voice played successfully');
-        }
-        
-      } catch (error) {
-        console.error('❌ Error playing AI voice:', error);
-        
-        // Fallback: play original recorded audio
-        console.log('Falling back to original recorded audio...');
-        try {
-          const audio = new Audio(recordedAudioUrl);
-          await audio.play();
-          console.log('Playing original recorded audio as fallback');
-        } catch (fallbackError) {
-          console.error('Fallback audio playback failed:', fallbackError);
-        }
-      }
-    } else {
+  const playRecordedAudio = async () => {
+    if (!recordedAudioUrl || !voiceTarget || recordedChunks.length === 0) {
       console.log('❌ No recorded audio URL, voice target, or recorded chunks available for AI voice');
+      return;
+    }
+    
+    console.log('🎤 Converting your recording to AI Voice for', voiceTarget);
+    
+    try {
+      const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
+      const fileExtension = recordingMimeType.split('/')[1].split(';')[0];
+      const fileName = `audio.${fileExtension}`;
+
+      const formData = new FormData();
+      formData.append('file', audioBlob, fileName);
+
+      console.log('Converting speech to text...');
+      const sttResponse = await fetch('/api/speech-to-text', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!sttResponse.ok) {
+        const errorData = await sttResponse.json();
+        console.error('STT API Error:', errorData);
+        throw new Error(`Speech-to-text failed: ${errorData.details || sttResponse.statusText}`);
+      }
+      
+      const sttResult = await sttResponse.json();
+      const recognizedText = sttResult.text;
+      console.log('Recognized text:', recognizedText);
+      
+      const selectedVoiceId = localStorage.getItem("selectedVoice");
+      if (!selectedVoiceId) {
+        throw new Error("No selected voice found in localStorage.");
+      }
+      console.log('Using ElevenLabs voice ID:', selectedVoiceId);
+
+      await speakWithElevenLabs(recognizedText, selectedVoiceId);
+      console.log('✅ ElevenLabs AI voice played successfully');
+      
+    } catch (error) {
+      console.error('❌ Error playing AI voice:', error);
+      alert(`Error playing AI voice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      console.log('Falling back to original recorded audio...');
+      try {
+        const audio = new Audio(recordedAudioUrl);
+        await audio.play();
+      } catch (fallbackError) {
+        console.error('Fallback audio playback failed:', fallbackError);
+      }
     }
   };
 
   const sendVoiceMessage = async () => {
-    console.log('[DEBUG] sendVoiceMessage called with:', { recordedAudioUrl, voiceTarget });
-    
-    if (recordedAudioUrl && voiceTarget) {
-      console.log('[DEBUG] Sending voice message for', voiceTarget);
-      
-      if (voiceTarget === 'chat' && selectedChat) {
-        // This is a chat AI voice message
-        console.log('[DEBUG] 🎤 Sending AI voice message to chat');
-        
-        // Convert recorded audio to text using speech-to-text
-        try {
-          const audioBlob = new Blob(recordedChunks, { type: 'audio/mp4' });
-          const formData = new FormData();
-          formData.append('file', audioBlob, 'audio.mp4');
-
-          console.log('[DEBUG] Created audioBlob and formData for STT');
-          
-          const sttResponse = await fetch('/api/speech-to-text', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (!sttResponse.ok) {
-            throw new Error('Speech-to-text failed');
-          }
-          
-          const sttResult = await sttResponse.json();
-          const recognizedText = sttResult.text;
-          
-          console.log('[DEBUG] 🎤 Recognized text from voice:', recognizedText);
-
-          // Get user's selected voice and process the audio
-          const selectedVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
-          console.log(`[DEBUG] Retrieved selectedVoice from localStorage: ${selectedVoice}`);
-          
-          const { voiceProcessingService } = await import('../lib/voiceProcessing');
-          const availableEffects = voiceProcessingService.getAvailableEffects();
-          const userVoiceEffect = availableEffects.find(effect => effect.id === selectedVoice);
-
-          let finalAudioUrl = recordedAudioUrl; // Fallback to original audio
-
-          if (userVoiceEffect) {
-            console.log(`[DEBUG] Found voice effect: ${userVoiceEffect.name}. Provider: ${userVoiceEffect.apiProvider}`);
-            console.log(`[DEBUG] Audio blob to process - Size: ${audioBlob.size}, Type: ${audioBlob.type}`);
-            
-            try {
-              console.log('[DEBUG] Calling voiceProcessingService.processVoice...');
-              // Correctly call the processVoice method
-              const processedResult = await voiceProcessingService.processVoice(audioBlob, userVoiceEffect);
-              
-              console.log('[DEBUG] Voice processing result:', processedResult);
-
-              if (processedResult.success && processedResult.audioUrl) {
-                finalAudioUrl = processedResult.audioUrl;
-                console.log(`[DEBUG] Voice processed successfully. New URL: ${finalAudioUrl}`);
-              } else {
-                console.error('[DEBUG] AI voice processing failed. Using original audio.', processedResult.error);
-              }
-            } catch (error) {
-              console.error('[DEBUG] Exception during voice processing:', error);
-              console.log('[DEBUG] Falling back to original audio due to exception');
-            }
-          } else {
-            console.log('[DEBUG] No AI voice effect found for the selected voice. Using original audio.');
-          }
-          
-          // Add user voice message to chat first
-          const userVoiceMessage: ChatMessage = {
-            id: `user-voice-${Date.now()}-${Math.random()}`,
-            senderId: "current",
-            senderName: "You",
-            type: 'voice',
-            content: recognizedText,
-            timestamp: new Date(),
-            isRead: true,
-            voiceUrl: finalAudioUrl
-          };
-          
-          // Update chats with user voice message
-          const updatedChatsWithUser = chats.map(chat => {
-            if (chat.id === selectedChat.id) {
-              return {
-                ...chat,
-                messages: [...chat.messages, userVoiceMessage],
-                lastMessage: userVoiceMessage,
-                unreadCount: 0
-              };
-            }
-            return chat;
-          });
-          setChats(updatedChatsWithUser);
-          
-          // Update selected chat with user voice message
-          setSelectedChat(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, userVoiceMessage],
-            lastMessage: userVoiceMessage,
-            unreadCount: 0
-          } : null);
-          
-          // Generate AI response directly
-          setIsGeneratingAIResponse(true);
-          
-          try {
-            // Find the AI user profile
-            const aiUser = MOCK_USERS.find(user => user.id === selectedChat.userId);
-            if (!aiUser) {
-              console.error('AI user not found:', selectedChat.userId);
-              return;
-            }
-            
-            console.log('🤖 Found AI user:', aiUser.name);
-            
-            // Generate AI response using the new AI service
-            const personalityId = aiUser.name.toLowerCase();
-            console.log('🤖 Calling AI service with personalityId:', personalityId);
-            
-            const aiResponse = await generateAIResponse(aiUser, recognizedText, selectedChat.messages);
-            
-            console.log('🤖 AI response received:', aiResponse);
-            
-            // 50% probability to send AI voice clip
-            const shouldSendVoice = Math.random() < 0.5;
-            
-            let aiMessage: ChatMessage;
-            
-            if (shouldSendVoice) {
-              // Create AI voice message
-              console.log('🎤 AI will send voice clip');
-              
-              aiMessage = {
-                id: `ai-${Date.now()}-${Math.random()}`,
-                senderId: selectedChat.id,
-                senderName: selectedChat.userName,
-                type: 'voice',
-                content: aiResponse,
-                voiceUrl: `ai-voice-${Date.now()}.mp3`, // Placeholder for voice URL
-                timestamp: new Date(),
-                isRead: false
-              };
-            } else {
-              // Create regular text message
-              console.log('💬 AI will send text message');
-              aiMessage = {
-                id: `ai-${Date.now()}-${Math.random()}`,
-                senderId: selectedChat.id,
-                senderName: selectedChat.userName,
-                type: 'text',
-                content: aiResponse,
-                timestamp: new Date(),
-                isRead: false
-              };
-            }
-            
-            console.log('🤖 Created AI message:', aiMessage);
-            
-            // Update chats with AI response
-            const updatedChatsWithAI = updatedChatsWithUser.map(chat => {
-              if (chat.id === selectedChat.id) {
-                return {
-                  ...chat,
-                  messages: [...chat.messages, aiMessage],
-                  lastMessage: aiMessage,
-                  unreadCount: 0
-                };
-              }
-              return chat;
-            });
-            
-            setChats(updatedChatsWithAI);
-            
-            // Update selected chat with AI response
-            setSelectedChat(prev => prev ? {
-              ...prev,
-              messages: [...prev.messages, aiMessage],
-              lastMessage: aiMessage,
-              unreadCount: 0
-            } : null);
-            
-            console.log('🤖 AI message sent successfully');
-            
-          } catch (error) {
-            console.error('🤖 Error sending AI message:', error);
-    } finally {
-      setIsGeneratingAIResponse(false);
+    if (!recordedAudioUrl || !voiceTarget || !selectedChat) {
+      console.log('❌ No recorded audio URL, voice target, or selected chat available.');
+      return;
     }
-          
-        } catch (error) {
-          console.error('❌ Error processing voice message:', error);
-        }
-      } else {
-        // This is a regular voice message (profile interaction)
-        // Don't create notification for own voice messages
-        console.log('🎤 Voice message sent to own profile - no notification created');
+
+    console.log('[DEBUG] Sending voice message for', voiceTarget);
+
+    try {
+      const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
+      const fileExtension = recordingMimeType.split('/')[1].split(';')[0];
+      const fileName = `audio.${fileExtension}`;
+
+      const formData = new FormData();
+      formData.append('file', audioBlob, fileName);
+      
+      console.log('[DEBUG] 🎤 Converting speech to text...');
+      const sttResponse = await fetch('/api/speech-to-text', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!sttResponse.ok) {
+        const errorData = await sttResponse.json();
+        throw new Error(`Speech-to-text failed: ${errorData.details || sttResponse.statusText}`);
       }
       
-      console.log('✅ Voice message sent successfully');
+      const sttResult = await sttResponse.json();
+      const recognizedText = sttResult.text;
+      console.log('[DEBUG] 🎤 Recognized text from voice:', recognizedText);
+
+      // We'll send the user's voice message with their original recording.
+      // The AI voice conversion happens on the AI's reply.
+      const userVoiceMessage: ChatMessage = {
+        id: `user-voice-${Date.now()}`,
+        senderId: "current",
+        senderName: "You",
+        type: 'voice',
+        content: recognizedText,
+        timestamp: new Date(),
+        isRead: true,
+        voiceUrl: recordedAudioUrl
+      };
       
-      // Close modal and reset
+      const updatedChatsWithUser = chats.map(chat => 
+        chat.id === selectedChat.id 
+          ? { ...chat, messages: [...chat.messages, userVoiceMessage], lastMessage: userVoiceMessage }
+          : chat
+      );
+      setChats(updatedChatsWithUser);
+      setSelectedChat(prev => prev ? { ...prev, messages: [...prev.messages, userVoiceMessage], lastMessage: userVoiceMessage } : null);
+
+      // Clean up voice modal state
       setShowVoiceModal(false);
       setVoiceTarget(null);
       setIsRecording(false);
       setRecordedAudioUrl(null);
       setRecordedChunks([]);
-    } else {
-      console.log('❌ No recorded audio URL or voice target available');
+
+      // Now, trigger the AI's response based on the recognized text.
+      await sendAIMessage(selectedChat.id, recognizedText);
+
+    } catch (error) {
+      console.error('❌ Error processing voice message:', error);
+      alert(`Could not send voice message: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const sendAIVoiceMessage = async (chatId: string, message: string) => {
-    if (!selectedChat || !selectedChat.isAIBot) return;
-    
-    console.log('🎤 sendAIVoiceMessage called with:', { chatId, message });
-    
-    // First, add user message to chat
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}-${Math.random()}`,
-      senderId: "current",
-      senderName: "You",
-      type: 'text',
-      content: message,
-      timestamp: new Date(),
-      isRead: true
-    };
-    
-    // Update chats with user message
-    const updatedChatsWithUser = chats.map(chat => {
-      if (chat.id === chatId) {
-        return {
-          ...chat,
-          messages: [...chat.messages, userMessage],
-          lastMessage: userMessage,
-          unreadCount: 0
-        };
-      }
-      return chat;
-    });
-    
-    setChats(updatedChatsWithUser);
-    
-    // Update selected chat with user message
-    setSelectedChat(prev => prev ? {
-      ...prev,
-      messages: [...prev.messages, userMessage],
-      lastMessage: userMessage,
-      unreadCount: 0
-    } : null);
-    
-    setIsGeneratingAIResponse(true);
-    
-    try {
-      // Find the AI user profile
-      const aiUser = MOCK_USERS.find(user => user.id === selectedChat.userId);
-      if (!aiUser) {
-        console.error('AI user not found:', selectedChat.userId);
-        return;
-      }
-      
-      // Generate AI response
-      const aiResponse = await generateAIResponse(aiUser, message, selectedChat.messages);
-      
-      // Create AI voice message
-      const aiMessage: ChatMessage = {
-        id: `ai-${Date.now()}-${Math.random()}`,
-        senderId: chatId,
-        senderName: selectedChat.userName,
-        type: 'voice',
-        content: aiResponse,
-        voiceUrl: `https://example.com/ai-voice-${Date.now()}.mp3`, // Placeholder
-        timestamp: new Date(),
-        isRead: false
-      };
-      
-      // Update chats with AI response
-      const updatedChatsWithAI = updatedChatsWithUser.map(chat => {
-        if (chat.id === chatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, aiMessage],
-            lastMessage: aiMessage,
-            unreadCount: 0
-          };
-        }
-        return chat;
-      });
-      
-      setChats(updatedChatsWithAI);
-      
-      // Update selected chat with AI response
-      setSelectedChat(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, aiMessage],
-        lastMessage: aiMessage,
-        unreadCount: 0
-      } : null);
-      
-    } catch (error) {
-      console.error('Error sending AI voice message:', error);
-    } finally {
-      setIsGeneratingAIResponse(false);
-    }
-  };
 
   if (!userProfile) {
     return (
