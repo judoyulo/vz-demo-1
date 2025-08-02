@@ -5,6 +5,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -12,15 +13,18 @@ export default async function handler(
     const { text, voiceId } = req.body;
 
     if (!text || !voiceId) {
+      console.error('❌ [elevenlabs-tts] "text" and "voiceId" are required. Received:', req.body);
       return res.status(400).json({ error: 'Text and voiceId are required' });
     }
 
-    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "sk_7dd57adca9fa825ffcd9dff1e997ca8996fc2ce975b9521f";
+    // Explicitly check for the API key from environment variables.
+    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
     if (!elevenLabsApiKey) {
+      console.error('❌ [elevenlabs-tts] Server configuration error: ELEVENLABS_API_KEY is not set.');
       return res.status(500).json({ error: 'ElevenLabs API key not configured' });
     }
 
-    console.log('🔊 ElevenLabs TTS request:', { text: text.substring(0, 50) + '...', voiceId });
+    console.log(`🔊 [elevenlabs-tts] Requesting TTS from ElevenLabs for voiceId: ${voiceId}`);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -44,21 +48,23 @@ export default async function handler(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs API error:', response.status, errorText);
+      console.error(`❌ [elevenlabs-tts] ElevenLabs API error. Status: ${response.status}. Details: ${errorText}`);
       return res.status(response.status).json({ 
-        error: 'ElevenLabs API error', 
+        error: 'Failed to generate speech from ElevenLabs', 
         details: errorText 
       });
     }
 
+    console.log(`✅ [elevenlabs-tts] Successfully received audio stream from ElevenLabs.`);
+    
     const audioBuffer = await response.arrayBuffer();
     
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', audioBuffer.byteLength.toString());
     res.send(Buffer.from(audioBuffer));
 
-  } catch (error) {
-    console.error('ElevenLabs TTS error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    console.error('💥 [elevenlabs-tts] An unexpected internal error occurred:', error.message);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
-} 
+}
