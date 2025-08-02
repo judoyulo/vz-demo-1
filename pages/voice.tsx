@@ -559,9 +559,9 @@ export default function VoicePage() {
         </div>
 
         {/* API Status Warning */}
-        {!process.env.VOICEMOD_API_KEY &&
-          !process.env.ELEVENLABS_API_KEY &&
-          !process.env.AZURE_SPEECH_KEY && (
+        {!process.env.NEXT_PUBLIC_VOICEMOD_API_KEY &&
+          !process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY &&
+          !process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY && (
             <div
               style={{
                 background: "rgba(255,152,0,0.1)",
