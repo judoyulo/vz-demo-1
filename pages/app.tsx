@@ -581,10 +581,13 @@ export default function App() {
     
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const formData = new FormData();
-      formData.append("file", audioBlob, "voice.webm");
+      const fileExtension = recordingMimeType.split('/')[1]?.split(';')[0] || 'webm';
+      const fileName = `voice.${fileExtension}`;
 
-      console.log('📡 Converting speech to text via FormData...');
+      const formData = new FormData();
+      formData.append("file", audioBlob, fileName);
+
+      console.log(`📡 Converting speech to text via FormData with filename: ${fileName}...`);
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
         body: formData,
@@ -633,10 +636,13 @@ export default function App() {
 
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const formData = new FormData();
-      formData.append("file", audioBlob, "voice.webm");
+      const fileExtension = recordingMimeType.split('/')[1]?.split(';')[0] || 'webm';
+      const fileName = `voice.${fileExtension}`;
       
-      console.log('📡 Converting speech to text via FormData...');
+      const formData = new FormData();
+      formData.append("file", audioBlob, fileName);
+      
+      console.log(`📡 Converting speech to text via FormData with filename: ${fileName}...`);
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
         body: formData,
