@@ -849,7 +849,7 @@ export class VoiceProcessingService {
 
     // Initialize APIs if keys are available
     const voicemodKey = process.env.NEXT_PUBLIC_VOICEMOD_API_KEY;
-    const elevenLabsKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
     const azureKey = process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY;
     const azureRegion = process.env.NEXT_PUBLIC_AZURE_SPEECH_REGION;
 
