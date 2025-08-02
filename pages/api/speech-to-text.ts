@@ -2,6 +2,15 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import FormData from 'form-data';
 import axios from 'axios';
 
+// Increase the body size limit for this specific API route
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '4mb',
+    },
+  },
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -47,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           'Authorization': `Bearer ${openaiApiKey}`,
           ...form.getHeaders(),
         },
-        maxBodyLength: Infinity, // Important for large audio files
+        maxBodyLength: Infinity,
       }
     );
     
