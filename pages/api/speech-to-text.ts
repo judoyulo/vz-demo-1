@@ -1,72 +1,68 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { IncomingForm, File } from 'formidable';
-import fs from 'fs';
-import FormData from 'form-data';
-import fetch from 'node-fetch';
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+    const { audioData } = req.body;
+
+    if (!audioData) {
+      return res.status(400).json({ error: 'Audio data is required' });
+    }
+
     const openaiApiKey = process.env.OPENAI_API_KEY;
+
     if (!openaiApiKey) {
-      console.error('OpenAI API key not found in environment');
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
+      console.error('❌ OpenAI API key not found in environment variables.');
+      return res.status(500).json({ error: 'Server configuration error: Missing API key.' });
     }
-
-    const form = new IncomingForm();
     
-    const [fields, files] = await form.parse(req);
+    console.log('✅ OpenAI API key loaded successfully.');
+
+    const audioBuffer = Buffer.from(audioData, 'base64');
+    console.log(`Audio buffer created, size: ${audioBuffer.length} bytes.`);
+
+    const boundary = `boundary-${Date.now().toString(16)}`;
     
-    const audioFile = (files.file as File[])[0];
+    const body = new FormData();
+    body.append('file', new Blob([audioBuffer]), 'audio.webm');
+    body.append('model', 'whisper-1');
 
-    if (!audioFile) {
-      return res.status(400).json({ error: 'No audio file uploaded' });
-    }
-
-    console.log('Received audio file:', audioFile.originalFilename, 'Size:', audioFile.size);
-
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream(audioFile.filepath), audioFile.originalFilename || 'audio.mp4');
-    formData.append('model', 'whisper-1');
-    
-    console.log('Sending request to OpenAI Whisper API...');
+    console.log('Sending transcription request to OpenAI Whisper API...');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openaiApiKey}`,
-        ...formData.getHeaders(),
       },
-      body: formData,
+      body: body,
     });
 
-    console.log('OpenAI API response status:', response.status);
+    const responseData = await response.json();
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('OpenAI API error:', errorData);
-      return res.status(response.status).json({ error: 'Speech recognition failed' });
+      console.error('OpenAI API error:', responseData);
+      return res.status(response.status).json({ 
+        error: 'Speech recognition failed', 
+        details: responseData.error?.message || 'Unknown error from OpenAI' 
+      });
     }
 
-    const result = await response.json();
-    console.log('Speech recognition result:', result);
+    console.log('Speech recognition successful, text:', responseData.text);
 
     res.status(200).json({ 
-      text: (result as any).text,
+      text: responseData.text,
       success: true 
     });
 
-  } catch (error) {
-    console.error('Speech-to-text error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    console.error('An unexpected error occurred in speech-to-text:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message || 'An unknown error occurred'
+    });
   }
 }
