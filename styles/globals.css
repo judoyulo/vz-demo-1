@@ -1,0 +1,117 @@
+/*
+  styles/globals.css
+  Contains custom global styles for the application.
+*/
+
+/* 1. Top navigation button group (My Avatar / My Role / My Voice / My Profile) */
+.versez-tab-button {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-weight: 500;
+  color: white;
+  margin-right: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  border: none;
+  text-decoration: none; /* For link-based buttons */
+  display: inline-block; /* For link-based buttons */
+}
+
+.versez-tab-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.versez-tab-button.active {
+  background: linear-gradient(135deg, #6d28d9, #9333ea);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* 2. Content tabs for Profile Bubble / Chats */
+.versez-tabs-container {
+  display: flex;
+  justify-content: center; /* Center the tabs within the container */
+  gap: 12px;
+  padding: 6px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 24px; /* Add some space below the tabs */
+}
+
+.versez-tab {
+  padding: 6px 16px;
+  border-radius: 20px;
+  color: #ccc;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  user-select: none;
+}
+
+.versez-tab:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.versez-tab.active {
+  background: linear-gradient(135deg, #4f46e5, #8b5cf6);
+  color: white;
+  font-weight: 600;
+}
+
+/* 3. RPG Guide Styles */
+.rpg-guide-toggle {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ddd;
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  transition: background 0.2s;
+}
+
+.rpg-guide-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rpg-guide-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  max-height: 500px;
+  overflow-y: auto;
+  transition: all 0.3s ease-in-out;
+}
+
+.rpg-guide-card h3 {
+  color: #E0D8FF;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 1.2em;
+}
+
+.rpg-guide-card h4 {
+  color: #c0b8ff;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 1.1em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 4px;
+}
+
+.rpg-guide-card p, .rpg-guide-card li {
+  color: #b0b8d0;
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+
+.rpg-guide-card ul {
+  padding-left: 20px;
+  margin-top: 8px;
+}
