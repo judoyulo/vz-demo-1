@@ -12,6 +12,18 @@ export const VOICE_MAPPING: Record<string, string> = {
   "elevenlabs-cyber": "2EiwWnXFnvU5JabPnv8n",    // Cyber - Male, robotic
   "elevenlabs-cosmo": "oWAxZDx7w5VEj9dCyTzz",    // Cosmo - Male, friendly
   "elevenlabs-scarlet": "wViIeQp4X7XZg8fAllTk",  // Scarlet - Female, passionate
+  
+  // Additional voices from voiceProcessingService
+  "elevenlabs-rachel": "21m00Tcm4TlvDq8ikWAM",   // Rachel - Professional female
+  "elevenlabs-sarah": "VR6AewLTigWG4xSOukaG",    // Sarah - Friendly female
+  "elevenlabs-emily": "AZnzlk1XvdvUeBnXmlld",    // Emily - Young energetic female
+  "elevenlabs-arnold": "VR6AewLTigWG4xSOukaG",   // Arnold - Deep male
+  "elevenlabs-josh": "TxGEqnHWrfWFTfGW9XjX",     // Josh - Warm friendly male
+  "elevenlabs-sam": "yoZ06aMxZJJ28mfd3POQ",      // Sam - Young energetic male
+  "elevenlabs-dorothy": "ThT5KcBeYPX3keUQqHPh",  // Dorothy - Wise elder
+  "elevenlabs-charlie": "VR6AewLTigWG4xSOukaG",  // Charlie - Mature male
+  "elevenlabs-lily": "EXAVITQu4vr4xnSDxMaL",     // Lily - Young cheerful female
+  "elevenlabs-tommy": "yoZ06aMxZJJ28mfd3POQ",    // Tommy - Young enthusiastic male
 };
 
 // Get ElevenLabs voice ID from user voice name
