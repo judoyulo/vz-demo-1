@@ -2,6 +2,7 @@ import formidable, { File } from 'formidable';
 import fs from 'fs';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { OpenAI, APIError } from 'openai';
+import { toFile } from 'openai/uploads';
 
 // Disable Next.js's default bodyParser to allow formidable to parse the stream
 export const config = {
@@ -47,10 +48,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     try {
-      console.log('📡 [speech-to-text] Creating transcription request for OpenAI Whisper...');
+      console.log('📡 [speech-to-text] Preparing file for OpenAI Whisper...');
+      
+      // Use the `toFile` helper to wrap the filestream with its original filename.
+      // This is crucial for OpenAI to recognize the file format correctly.
+      const uploadableFile = await toFile(fs.createReadStream(file.filepath), file.originalFilename || 'voice.unknown');
+
+      console.log('📡 [speech-to-text] Creating transcription request...');
       
       const transcription = await openai.audio.transcriptions.create({
-        file: fs.createReadStream(file.filepath),
+        file: uploadableFile,
         model: 'whisper-1',
       });
       
