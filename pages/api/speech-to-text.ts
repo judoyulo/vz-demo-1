@@ -1,14 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { Formidable } from 'formidable';
-import fs from 'fs';
 import FormData from 'form-data';
-
-// Disable Next.js's default body parser to handle multipart/form-data
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+import fetch from 'node-fetch';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -24,41 +16,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log('✅ OpenAI API key loaded.');
 
   try {
-    const form = new Formidable({});
-    
-    const data = await new Promise<{ files: any }>((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) {
-          console.error('Error parsing form data:', err);
-          reject(err);
-          return;
-        }
-        resolve({ files });
-      });
-    });
+    const { audioData, mimeType } = req.body;
 
-    const audioFile = data.files.file?.[0];
-
-    if (!audioFile) {
-      console.error('❌ No audio file was uploaded.');
-      return res.status(400).json({ error: 'No file uploaded.' });
+    if (!audioData) {
+      return res.status(400).json({ error: 'Audio data (base64) is required.' });
+    }
+    if (!mimeType) {
+      return res.status(400).json({ error: 'MIME type is required.' });
     }
 
-    console.log(`✅ File received: ${audioFile.originalFilename}, size: ${audioFile.size} bytes, path: ${audioFile.filepath}`);
+    console.log(`Received audio data. MimeType: ${mimeType}, Base64 Length: ${audioData.length}`);
+    
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audioData, 'base64');
+    console.log(`Audio buffer created, size: ${audioBuffer.length} bytes.`);
+    
+    const fileExtension = mimeType.split('/')[1].split(';')[0] || 'webm';
+    const fileName = `audio.${fileExtension}`;
 
-    const forwardForm = new FormData();
-    forwardForm.append('file', fs.createReadStream(audioFile.filepath), audioFile.originalFilename || 'audio.webm');
-    forwardForm.append('model', 'whisper-1');
+    const form = new FormData();
+    form.append('file', audioBuffer, {
+      filename: fileName,
+      contentType: mimeType,
+    });
+    form.append('model', 'whisper-1');
 
-    console.log('📡 Forwarding request to OpenAI Whisper API...');
+    console.log(`📡 Forwarding request to OpenAI Whisper API as ${fileName}...`);
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openaiApiKey}`,
-        ...forwardForm.getHeaders(),
+        ...form.getHeaders(),
       },
-      body: forwardForm,
+      body: form,
     });
 
     const responseData = await response.json();

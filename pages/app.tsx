@@ -25,6 +25,25 @@ import {
   LAYOUT_CONFIG 
 } from "../utils/layoutConfig";
 
+// Helper to convert Blob to Base64
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        // The result includes the data URL prefix (e.g., "data:audio/webm;base64,"), remove it.
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      } else {
+        reject(new Error("Failed to convert blob to base64 string."));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+
 export default function App() {
   console.log('App component rendering...');
   
@@ -613,16 +632,18 @@ export default function App() {
     
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const fileExtension = recordingMimeType.split('/')[1].split(';')[0];
-      const fileName = `audio.${fileExtension}`;
+      const base64Audio = await blobToBase64(audioBlob);
 
-      const formData = new FormData();
-      formData.append('file', audioBlob, fileName);
-
-      console.log('Converting speech to text...');
+      console.log('Converting speech to text via base64...');
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioData: base64Audio,
+          mimeType: recordingMimeType,
+        }),
       });
       
       if (!sttResponse.ok) {
@@ -668,16 +689,18 @@ export default function App() {
 
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const fileExtension = recordingMimeType.split('/')[1].split(';')[0];
-      const fileName = `audio.${fileExtension}`;
-
-      const formData = new FormData();
-      formData.append('file', audioBlob, fileName);
+      const base64Audio = await blobToBase64(audioBlob);
       
-      console.log('[DEBUG] 🎤 Converting speech to text...');
+      console.log('[DEBUG] 🎤 Converting speech to text via base64...');
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioData: base64Audio,
+          mimeType: recordingMimeType,
+        }),
       });
       
       if (!sttResponse.ok) {
@@ -689,8 +712,6 @@ export default function App() {
       const recognizedText = sttResult.text;
       console.log('[DEBUG] 🎤 Recognized text from voice:', recognizedText);
 
-      // We'll send the user's voice message with their original recording.
-      // The AI voice conversion happens on the AI's reply.
       const userVoiceMessage: ChatMessage = {
         id: `user-voice-${Date.now()}`,
         senderId: "current",
