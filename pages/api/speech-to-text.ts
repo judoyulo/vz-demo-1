@@ -1,88 +1,81 @@
+import formidable, { File } from 'formidable';
+import fs from 'fs';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import FormData from 'form-data';
-import axios from 'axios';
+import { OpenAI } from 'openai';
 
-// Increase body size limit and ensure we're using the JSON body parser.
+// Disable Next.js's default bodyParser to allow formidable to parse the stream
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '4mb',
-    },
+    bodyParser: false,
   },
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Step 1: Check Method
-  console.log(`[speech-to-text] Received request with method: ${req.method}`);
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Step 2: Log Headers and Body Content
-  console.log(`[speech-to-text] Content-Type Header: ${req.headers['content-type']}`);
-  
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     console.error('❌ [speech-to-text] OpenAI API key not configured on the server.');
     return res.status(500).json({ error: 'Server configuration error: Missing API key.' });
   }
-  console.log('✅ [speech-to-text] OpenAI API key loaded.');
+  
+  const openai = new OpenAI({ apiKey: openaiApiKey });
 
-  try {
-    const { audioData, mimeType } = req.body;
+  const form = formidable({});
 
-    if (!audioData) {
-      console.error('❌ [speech-to-text] Request body is missing "audioData".');
-      return res.status(400).json({ error: 'Audio data (base64) is required.' });
-    }
-    if (!mimeType) {
-      console.error('❌ [speech-to-text] Request body is missing "mimeType".');
-      return res.status(400).json({ error: 'MIME type is required.' });
+  form.parse(req, async (err, fields, files) => {
+    if (err) {
+      console.error('❌ [speech-to-text] Error parsing form data:', err);
+      return res.status(400).json({ error: 'Failed to parse form data.', details: err.message });
     }
 
-    console.log(`✅ [speech-to-text] Received audio data. MimeType: ${mimeType}, Base64 Length: ${audioData.length}`);
-    
-    // Convert base64 to buffer
-    const audioBuffer = Buffer.from(audioData, 'base64');
-    console.log(`✅ [speech-to-text] Audio buffer created, size: ${audioBuffer.length} bytes.`);
-    
-    const fileExtension = mimeType.split('/')[1]?.split(';')[0] || 'webm';
-    const fileName = `audio.${fileExtension}`;
+    // formidable nests files in an array, even for a single upload
+    const file = (files.file as File[])?.[0];
 
-    // Step 3: Construct FormData for OpenAI
-    const form = new FormData();
-    form.append('file', audioBuffer, fileName);
-    form.append('model', 'whisper-1');
+    if (!file) {
+      console.error('❌ [speech-to-text] No file found in the "file" field.');
+      return res.status(400).json({ error: 'No file uploaded. Make sure the file is sent under the "file" key.' });
+    }
 
-    console.log(`📡 [speech-to-text] Forwarding request to OpenAI Whisper API as "${fileName}"...`);
+    console.log('✅ [speech-to-text] File received:');
+    console.log(`   - Path: ${file.filepath}`);
+    console.log(`   - Original Name: ${file.originalFilename}`);
+    console.log(`   - MIME Type: ${file.mimetype}`);
+    console.log(`   - Size: ${file.size} bytes`);
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/audio/transcriptions',
-      form,
-      {
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          ...form.getHeaders(),
-        },
-        maxBodyLength: Infinity,
-      }
-    );
-    
-    console.log('✅ [speech-to-text] Transcription successful:', response.data.text);
-    res.status(200).json({
-      text: response.data.text,
-      success: true,
-    });
+    try {
+      console.log('📡 [speech-to-text] Creating transcription request for OpenAI Whisper...');
+      
+      const transcription = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(file.filepath),
+        model: 'whisper-1',
+      });
+      
+      console.log('✅ [speech-to-text] Transcription successful:', transcription.text);
 
-  } catch (error: any) {
-    console.error('💥 [speech-to-text] An unexpected error occurred:', error.response?.data || error.message);
-    const status = error.response?.status || 500;
-    const details = error.response?.data?.error?.message || 'An unknown error occurred during processing.';
-    
-    res.status(status).json({
-      error: 'Internal server error',
-      details: details,
-    });
-  }
+      // Cleanup the temporary file
+      fs.unlink(file.filepath, (unlinkErr) => {
+        if (unlinkErr) {
+          console.warn(`⚠️ [speech-to-text] Could not delete temporary file: ${file.filepath}`, unlinkErr);
+        } else {
+          console.log(`🗑️ [speech-to-text] Temporary file deleted: ${file.filepath}`);
+        }
+      });
+      
+      res.status(200).json({ text: transcription.text, success: true });
+
+    } catch (apiError: any) {
+      console.error('💥 [speech-to-text] OpenAI API error:', apiError.response?.data || apiError.message);
+      const status = apiError.response?.status || 500;
+      const details = apiError.response?.data?.error?.message || 'Error calling Whisper API.';
+      
+      res.status(status).json({
+        error: 'Speech recognition failed',
+        details: details,
+      });
+    }
+  });
 }

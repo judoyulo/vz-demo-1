@@ -13,9 +13,8 @@ import {
   generateVoiceIntroText,
   generateMoodVoiceText,
   formatTimeAgo,
-  getNotificationText,
 } from "../utils/helpers";
-import { speakWithElevenLabs, speakText, playUserVoice } from "../utils/voiceUtils";
+import { speakWithElevenLabs, playUserVoice } from "../utils/voiceUtils";
 import { generateAIResponse } from "../utils/aiUtils";
 import { 
   getPageContainerStyle, 
@@ -24,25 +23,6 @@ import {
   getButtonStyle,
   LAYOUT_CONFIG 
 } from "../utils/layoutConfig";
-
-// Helper to convert Blob to Base64
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        // The result includes the data URL prefix (e.g., "data:audio/webm;base64,"), remove it.
-        const base64String = reader.result.split(',')[1];
-        resolve(base64String);
-      } else {
-        reject(new Error("Failed to convert blob to base64 string."));
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
 
 export default function App() {
   console.log('App component rendering...');
@@ -71,9 +51,7 @@ export default function App() {
 
   // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
-  const [isChatRecording, setIsChatRecording] = useState(false);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  const [chatRecordedAudioUrl, setChatRecordedAudioUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [recordingMimeType, setRecordingMimeType] = useState<string>('');
@@ -395,12 +373,10 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error in playAIVoice:', error);
-      // Optional: Add a fallback to browser speech synthesis here if needed
     }
   };
 
   const handleChatSelect = (chat: Chat) => {
-    // Mark all messages as read and reset unread count when entering chat
     const updatedChat = {
       ...chat,
       messages: chat.messages.map(msg => ({
@@ -410,20 +386,16 @@ export default function App() {
       unreadCount: 0
     };
     
-    // Update the chat in the chats list
     const updatedChats = chats.map(c => 
       c.id === chat.id ? updatedChat : c
     );
     setChats(updatedChats);
     
-    // Set the updated chat as selected
     setSelectedChat(updatedChat);
     setShowChatModal(true);
   };
 
   const handleNotificationClick = () => {
-    // Hide the unread indicator by clearing notifications array
-    // But keep allNotifications for display in modal
     setNotifications([]);
   };
 
@@ -432,7 +404,6 @@ export default function App() {
     
     console.log('🤖 sendAIMessage called with:', { chatId, message, selectedChat: selectedChat.userName });
     
-    // First, add user message to chat
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}-${Math.random()}`,
       senderId: "current",
@@ -443,9 +414,6 @@ export default function App() {
       isRead: true
     };
     
-    console.log('🤖 Adding user message:', userMessage);
-    
-    // Update chats with user message
     const updatedChatsWithUser = chats.map(chat => {
       if (chat.id === chatId) {
         return {
@@ -460,7 +428,6 @@ export default function App() {
     
     setChats(updatedChatsWithUser);
     
-    // Update selected chat with user message
     setSelectedChat(prev => prev ? {
       ...prev,
       messages: [...prev.messages, userMessage],
@@ -471,34 +438,21 @@ export default function App() {
     setIsGeneratingAIResponse(true);
 
     try {
-      // Find the AI user profile
       const aiUser = MOCK_USERS.find(user => user.id === selectedChat.userId);
       if (!aiUser) {
         console.error('AI user not found:', selectedChat.userId);
         return;
       }
       
-      console.log('🤖 Found AI user:', aiUser.name);
-      
-      // Generate AI response using the new AI service
-      const personalityId = aiUser.name.toLowerCase();
-      console.log('🤖 Calling AI service with personalityId:', personalityId);
-      
       const aiResponse = await generateAIResponse(aiUser, message, selectedChat.messages);
       
-      console.log('🤖 AI response received:', aiResponse);
-      
-      // 50% probability to send AI voice clip
       const shouldSendVoice = Math.random() < 0.5;
       
       let aiMessage: ChatMessage;
       
       if (shouldSendVoice) {
-        // Create AI voice message
         console.log('🎤 AI will send voice clip');
-        
-        // Generate the voice and get the URL
-        const voiceAudioUrl = await playUserVoice(aiResponse, aiUser.voice, false); // autoplay is false
+        const voiceAudioUrl = await playUserVoice(aiResponse, aiUser.voice, false);
 
         aiMessage = {
           id: `ai-${Date.now()}-${Math.random()}`,
@@ -506,12 +460,11 @@ export default function App() {
           senderName: selectedChat.userName,
           type: 'voice',
           content: aiResponse,
-          voiceUrl: voiceAudioUrl || undefined, // Use the generated voice URL
+          voiceUrl: voiceAudioUrl || undefined,
           timestamp: new Date(),
           isRead: false
         };
       } else {
-        // Create regular text message
         console.log('💬 AI will send text message');
         aiMessage = {
           id: `ai-${Date.now()}-${Math.random()}`,
@@ -524,9 +477,6 @@ export default function App() {
         };
       }
       
-      console.log('🤖 Created AI message:', aiMessage);
-      
-      // Update chats with AI response
       const updatedChatsWithAI = updatedChatsWithUser.map(chat => {
         if (chat.id === chatId) {
           return {
@@ -541,7 +491,6 @@ export default function App() {
 
       setChats(updatedChatsWithAI);
       
-      // Update selected chat with AI response
       setSelectedChat(prev => prev ? {
               ...prev,
               messages: [...prev.messages, aiMessage],
@@ -632,18 +581,13 @@ export default function App() {
     
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const base64Audio = await blobToBase64(audioBlob);
+      const formData = new FormData();
+      formData.append("file", audioBlob, "voice.webm");
 
-      console.log('Converting speech to text via base64...');
+      console.log('📡 Converting speech to text via FormData...');
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audioData: base64Audio,
-          mimeType: recordingMimeType,
-        }),
+        body: formData,
       });
       
       if (!sttResponse.ok) {
@@ -654,7 +598,7 @@ export default function App() {
       
       const sttResult = await sttResponse.json();
       const recognizedText = sttResult.text;
-      console.log('Recognized text:', recognizedText);
+      console.log('✅ Recognized text:', recognizedText);
       
       const selectedVoiceId = localStorage.getItem("selectedVoice");
       if (!selectedVoiceId) {
@@ -685,22 +629,17 @@ export default function App() {
       return;
     }
 
-    console.log('[DEBUG] Sending voice message for', voiceTarget);
+    console.log('📤 Sending voice message for', voiceTarget);
 
     try {
       const audioBlob = new Blob(recordedChunks, { type: recordingMimeType });
-      const base64Audio = await blobToBase64(audioBlob);
+      const formData = new FormData();
+      formData.append("file", audioBlob, "voice.webm");
       
-      console.log('[DEBUG] 🎤 Converting speech to text via base64...');
+      console.log('📡 Converting speech to text via FormData...');
       const sttResponse = await fetch('/api/speech-to-text', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audioData: base64Audio,
-          mimeType: recordingMimeType,
-        }),
+        body: formData,
       });
       
       if (!sttResponse.ok) {
@@ -710,7 +649,7 @@ export default function App() {
       
       const sttResult = await sttResponse.json();
       const recognizedText = sttResult.text;
-      console.log('[DEBUG] 🎤 Recognized text from voice:', recognizedText);
+      console.log('✅ Recognized text from voice:', recognizedText);
 
       const userVoiceMessage: ChatMessage = {
         id: `user-voice-${Date.now()}`,
@@ -1645,7 +1584,6 @@ export default function App() {
                 <button
                   onClick={() => {
                     setShowNotifications(false);
-                    // Don't clear notifications, just mark them as read
                   }}
                   style={{
                     width: "100%",
