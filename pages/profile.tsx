@@ -443,21 +443,9 @@ export default function ProfilePage() {
 
       console.log("✅ Microphone access granted");
 
-      // Create MediaRecorder with fallback options
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(stream, {
-          mimeType: "audio/webm;codecs=opus",
-        });
-      } catch (e) {
-        console.log("⚠️ WebM not supported, trying MP4...");
-        try {
-          recorder = new MediaRecorder(stream, { mimeType: "audio/mp4" });
-        } catch (e2) {
-          console.log("⚠️ MP4 not supported, using default...");
-          recorder = new MediaRecorder(stream);
-        }
-      }
+      // Use unified MediaRecorder utility for consistent webm format
+      const { createMediaRecorder, createAudioBlob } = await import("../utils/mediaRecorderUtils");
+      const recorder = createMediaRecorder(stream);
 
       const chunks: Blob[] = [];
 
@@ -477,11 +465,8 @@ export default function ProfilePage() {
 
       recorder.onstop = async () => {
         console.log("⏹️ Recording stopped");
-        const blob = new Blob(chunks, {
-          type: recorder.mimeType || "audio/webm",
-        });
-
-        console.log("🎵 Audio blob created:", blob.size, "bytes");
+        const blob = createAudioBlob(chunks);
+        console.log("🎵 Audio blob created using unified utility");
 
         // Process with AI voice if selected
         if (profileData.voice) {

@@ -385,13 +385,16 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
         } else {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const mediaRecorder = new MediaRecorder(stream);
+                
+                // Use unified MediaRecorder utility for consistent webm format
+                const { createMediaRecorder, createAudioBlob } = await import('../utils/mediaRecorderUtils');
+                const mediaRecorder = createMediaRecorder(stream);
                 mediaRecorderRef.current = mediaRecorder;
                 const audioChunks: Blob[] = [];
 
                 mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioBlob = createAudioBlob(audioChunks);
                     const audioDataUrl = await blobToBase64(audioBlob);
                     setRecordedAudioUrl(audioDataUrl);
                     
@@ -683,18 +686,19 @@ export default function RPGPage() {
     
         if (type === 'voice') {
             try {
+                // Convert data URL back to Blob
                 const base64Audio = content.split(',')[1];
-                const response = await fetch('/api/speech-to-text', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audioData: base64Audio }),
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    textForAI = data.text;
-                } else {
-                    throw new Error(data.error || 'Speech-to-text failed');
+                const binaryData = atob(base64Audio);
+                const arrayBuffer = new ArrayBuffer(binaryData.length);
+                const view = new Uint8Array(arrayBuffer);
+                for (let i = 0; i < binaryData.length; i++) {
+                    view[i] = binaryData.charCodeAt(i);
                 }
+                const audioBlob = new Blob([arrayBuffer], { type: 'audio/webm' });
+                
+                // Use unified speech-to-text upload function
+                const { uploadSpeechToText } = await import('../utils/speechUtils');
+                textForAI = await uploadSpeechToText(audioBlob);
             } catch (error: any) {
                 console.error("Speech-to-text error:", error);
                 textForAI = `[Voice message failed to process: ${error.message}]`;

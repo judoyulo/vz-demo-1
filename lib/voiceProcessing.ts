@@ -697,7 +697,7 @@ class LocalVoiceProcessor {
           ? "audio/webm;codecs=opus"
           : MediaRecorder.isTypeSupported("audio/webm")
             ? "audio/webm"
-            : "audio/mp4";
+            : "audio/webm"; // fallback to webm for OpenAI Whisper compatibility
 
         const blob = new Blob(chunks, { type: mimeType });
         console.log(

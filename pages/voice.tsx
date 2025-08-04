@@ -60,16 +60,9 @@ export default function VoicePage() {
         },
       });
 
-      // Get supported MIME types
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-          ? "audio/webm"
-          : "audio/mp4";
-
-      console.log("Using MIME type:", mimeType);
-
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // Use unified MediaRecorder utility for consistent webm format
+      const { createMediaRecorder, createAudioBlob } = await import("../utils/mediaRecorderUtils");
+      const recorder = createMediaRecorder(stream);
       const chunks: Blob[] = [];
 
       recorder.ondataavailable = event => {
@@ -79,13 +72,8 @@ export default function VoicePage() {
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        console.log(
-          "Recording completed, blob size:",
-          blob.size,
-          "type:",
-          blob.type
-        );
+        const blob = createAudioBlob(chunks);
+        console.log("Recording completed using unified utility");
         setRecordedAudio(prev => ({ ...prev, [voiceId]: blob }));
         stream.getTracks().forEach(track => track.stop());
       };
