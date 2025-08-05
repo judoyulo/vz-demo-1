@@ -1,11 +1,31 @@
 import { AIVoiceSettings } from "../types";
 
 // Voice mapping from user voice names to ElevenLabs voice IDs
+// ⚠️ CRITICAL: Keep this synchronized with lib/voiceProcessing.ts
 export const VOICE_MAPPING: Record<string, string> = {
+  // Core user voices (used in mockUsers.ts)
   "elevenlabs-aria": "9BWtsMINqrJLrRacOk9x",      // Aria - Female, warm
-  "elevenlabs-domi": "AZnzlk1XvdvUeBnXmlld",     // Domi - Female, energetic
+  "elevenlabs-domi": "AZnzlk1XvdvUeBnXmlld",     // Domi - Female, energetic  
   "elevenlabs-bella": "EXAVITQu4vr4xnSDxMaL",    // Bella - Female, soft
-  "elevenlabs-echo": "21m00Tcm4TlvDq8ikWAM",     // Echo - Male, deep
+  "elevenlabs-echo": "pNInz6obpgDQGcFmaJgB",     // Echo - Male, deep (corrected)
+  
+  // Professional female voices (synchronized with lib/voiceProcessing.ts)
+  "elevenlabs-rachel": "21m00Tcm4TlvDq8ikWAM",   // Rachel - Professional female
+  "elevenlabs-sarah": "VR6AewLTigWG4xSOukaG",    // Sarah - Professional female
+  "elevenlabs-emily": "AZnzlk1XvdvUeBnXmlld",    // Emily - Professional female
+  
+  // Professional male voices (synchronized with lib/voiceProcessing.ts)
+  "elevenlabs-arnold": "VR6AewLTigWG4xSOukaG",   // Arnold - Professional male
+  "elevenlabs-josh": "TxGEqnHWrfWFTfGW9XjX",     // Josh - Professional male
+  "elevenlabs-sam": "yoZ06aMxZJJ28mfd3POQ",      // Sam - Professional male
+  
+  // Character voices (synchronized with lib/voiceProcessing.ts)
+  "elevenlabs-dorothy": "ThT5KcBeYPX3keUQqHPh",  // Dorothy - Character voice
+  "elevenlabs-charlie": "VR6AewLTigWG4xSOukaG",  // Charlie - Character voice
+  "elevenlabs-lily": "EXAVITQu4vr4xnSDxMaL",     // Lily - Character voice
+  "elevenlabs-tommy": "yoZ06aMxZJJ28mfd3POQ",    // Tommy - Character voice
+  
+  // Extended voices (legacy mapping)
   "elevenlabs-onyx": "pNInz6obpgDQGcFmaJgB",     // Onyx - Male, serious
   "elevenlabs-nova": "piTKgcLEGmPE4e6mEKli",     // Nova - Female, clear
   "elevenlabs-shimmer": "VR6AewLTigWG4xSOukaG",  // Shimmer - Female, bright
@@ -16,7 +36,13 @@ export const VOICE_MAPPING: Record<string, string> = {
 
 // Get ElevenLabs voice ID from user voice name
 export const getVoiceId = (userVoice: string): string => {
-  return VOICE_MAPPING[userVoice] || "9BWtsMINqrJLrRacOk9x"; // Default to Aria if not found
+  const voiceId = VOICE_MAPPING[userVoice];
+  if (!voiceId) {
+    console.warn(`⚠️ Voice mapping not found for: ${userVoice}, using default Aria`);
+    return "9BWtsMINqrJLrRacOk9x"; // Default to Aria
+  }
+  console.log(`🎤 Voice mapping: ${userVoice} → ${voiceId}`);
+  return voiceId;
 };
 
 // Safari-compatible AudioContext playback for ultimate compatibility

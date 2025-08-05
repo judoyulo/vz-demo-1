@@ -679,7 +679,38 @@ class LocalVoiceProcessor {
       `🎙️ MediaStreamDestination connected, stream tracks: ${mediaStreamDestination.stream.getTracks().length}`
     );
 
-    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+    // Determine Safari-compatible MIME type for MediaRecorder
+    function isSafari(): boolean {
+      const userAgent = navigator.userAgent;
+      return userAgent.includes("Safari") && !userAgent.includes("Chrome");
+    }
+
+    function getCompatibleMimeType(): string {
+      if (isSafari()) {
+        // Safari prefers MP4/AAC for recording and playback
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          return "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")) {
+          return "audio/mp4;codecs=mp4a.40.2";
+        } else {
+          return "audio/mp4"; // fallback
+        }
+      } else {
+        // Chrome/Firefox prefer WebM
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          return "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          return "audio/webm";
+        } else {
+          return "audio/webm"; // fallback
+        }
+      }
+    }
+
+    const mimeType = getCompatibleMimeType();
+    console.log(`🎤 Using MIME type for LocalVoiceProcessor: ${mimeType}`);
+
+    const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType });
     const chunks: Blob[] = [];
 
     return new Promise(resolve => {
@@ -691,13 +722,6 @@ class LocalVoiceProcessor {
       };
       mediaRecorder.onstop = () => {
         console.log(`🛑 MediaRecorder stopped, total chunks: ${chunks.length}`);
-
-        // Use a more compatible audio format
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : MediaRecorder.isTypeSupported("audio/webm")
-            ? "audio/webm"
-            : "audio/webm"; // fallback to webm for OpenAI Whisper compatibility
 
         const blob = new Blob(chunks, { type: mimeType });
         console.log(

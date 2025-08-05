@@ -157,10 +157,9 @@ async function handleFormDataUpload(req: NextApiRequest, res: NextApiResponse, o
             console.log('✅ [speech-to-text] MP4 to WAV conversion successful');
           } catch (conversionError) {
             console.error('❌ [speech-to-text] MP4 conversion failed:', conversionError);
-            const errorMessage = conversionError instanceof Error ? conversionError.message : String(conversionError);
             return res.status(500).json({ 
               error: 'Audio format conversion failed', 
-              details: `FFmpeg conversion error: ${errorMessage}. Please try using Chrome or Firefox for better compatibility.` 
+              details: `FFmpeg conversion error: ${conversionError.message}. Please try using Chrome or Firefox for better compatibility.` 
             });
           }
         } else {
