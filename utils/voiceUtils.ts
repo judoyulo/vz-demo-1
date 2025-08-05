@@ -150,13 +150,8 @@ export const playAudioWithContext = async (audioBlob: Blob | string): Promise<vo
         resolve();
       };
       
-      source.onerror = (error) => {
-        console.error("🍎 [AudioContext] ❌ SOURCE ERROR:", error);
-        if (audioContext && audioContext.state !== 'closed') {
-          audioContext.close();
-        }
-        reject(error);
-      };
+      // Note: AudioBufferSourceNode doesn't have onerror property
+      // Errors are typically handled via try-catch blocks around AudioContext operations
       
       // Add debugging event to confirm start
       source.addEventListener('start', () => {
