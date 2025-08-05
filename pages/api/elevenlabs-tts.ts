@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { getVoiceId } from '../../utils/voiceUtils';
 
 export default async function handler(
   req: NextApiRequest,
@@ -9,11 +10,19 @@ export default async function handler(
   }
 
   try {
-    const { text, voiceId } = req.body;
+    const { text, voiceId: rawVoiceId } = req.body;
 
-    if (!text || !voiceId) {
+    if (!text || !rawVoiceId) {
       return res.status(400).json({ error: 'Text and voiceId are required' });
     }
+
+    // 🔧 CRITICAL FIX: Map voice name to actual ElevenLabs voice ID
+    const voiceId = getVoiceId(rawVoiceId);
+    console.log('🔧 [DEPLOYMENT FIX] Voice mapping:', { 
+      received: rawVoiceId, 
+      mapped: voiceId,
+      isCorrectFormat: voiceId.length > 10 && !voiceId.startsWith('elevenlabs-')
+    });
 
     const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "sk_7dd57adca9fa825ffcd9dff1e997ca8996fc2ce975b9521f";
     if (!elevenLabsApiKey) {
