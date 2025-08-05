@@ -1042,7 +1042,7 @@ export class VoiceProcessingService {
         description: "Friendly and approachable female voice",
         category: "Professional Female",
         apiProvider: "elevenlabs",
-        voiceId: "VR6AewLTigWG4xSOukaG",
+        voiceId: "kdmDKE6EkgrWrrykO9Qt",
       },
       {
         id: "elevenlabs-emily",
@@ -1060,7 +1060,7 @@ export class VoiceProcessingService {
         description: "Professional male voice - strong and clear",
         category: "Professional Male",
         apiProvider: "elevenlabs",
-        voiceId: "AZnzlk1XvdvUeBnXmlld",
+        voiceId: "TxGEqnHWrfWFTfGW9XjX",
       },
       {
         id: "elevenlabs-arnold",
@@ -1068,7 +1068,7 @@ export class VoiceProcessingService {
         description: "Deep and powerful male voice",
         category: "Professional Male",
         apiProvider: "elevenlabs",
-        voiceId: "VR6AewLTigWG4xSOukaG",
+        voiceId: "pNInz6obpgDQGcFmaJgB",
       },
       {
         id: "elevenlabs-josh",
@@ -1110,7 +1110,7 @@ export class VoiceProcessingService {
         description: "Mature and experienced male voice",
         category: "Character Voices",
         apiProvider: "elevenlabs",
-        voiceId: "VR6AewLTigWG4xSOukaG",
+        voiceId: "2EiwWnXFnvU5JabPnv8n",
       },
       {
         id: "elevenlabs-lily",

@@ -334,7 +334,7 @@ const ScriptLoader = ({ story, playerProfile, mission }: { story: string, player
           <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div onClick={() => setShowSecret(!showSecret)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ marginTop: '0', color: '#fff' }}>🔒 Private Mission</h3>
-              <span style={{ fontSize: '12px', color: 'rgba(255,255,0,0.7)' }}>(僅你可見) {showSecret ? '▲' : '▼'}</span>
+              <span style={{ fontSize: '12px', color: 'rgba(255,255,0,0.7)' }}>(Only you can see) {showSecret ? '▲' : '▼'}</span>
             </div>
             {showSecret && (
               <div>
@@ -350,23 +350,44 @@ const ScriptLoader = ({ story, playerProfile, mission }: { story: string, player
     );
 };
 
-const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: GameState, onSendMessage: (content: string, type: 'text' | 'voice') => Promise<void>, onEndTurn: () => void }) => {
+const DialogueArea = ({ gameState, onSendMessage, onEndTurn, opponentProfile }: { gameState: GameState, onSendMessage: (content: string, type: 'text' | 'voice') => Promise<void>, onEndTurn: () => void, opponentProfile: UserProfile | null }) => {
     const [text, setText] = useState('');
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+    const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
     
     const playerMessageCount = gameState.chatLog.filter((m: Message) => m.senderId === 'player1' && m.round === gameState.round).length;
     const canSendMessage = playerMessageCount < MAX_MESSAGES_PER_ROUND && gameState.currentPhase === 'chat';
 
+    // Auto-scroll to bottom when new messages are added
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [gameState.chatLog.length]);
+
     const handleSendText = () => { if (text.trim() && canSendMessage) { onSendMessage(text, 'text'); setText(''); } };
 
     const handleSendVoice = () => {
+        console.log('🎤 [handleSendVoice] Called with:', { 
+            recordedAudioUrl: recordedAudioUrl ? 'exists' : 'null', 
+            canSendMessage 
+        });
+        
         if (recordedAudioUrl && canSendMessage) {
+            console.log('🎤 [handleSendVoice] Sending voice message...');
             onSendMessage(recordedAudioUrl, 'voice');
             setRecordedAudioUrl(null);
+            setPreviewAudioUrl(null);
+        } else {
+            console.warn('🎤 [handleSendVoice] Cannot send:', { 
+                recordedAudioUrl: !!recordedAudioUrl, 
+                canSendMessage 
+            });
         }
     };
 
@@ -396,7 +417,58 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
                 mediaRecorder.onstop = async () => {
                     const audioBlob = createAudioBlob(audioChunks);
                     const audioDataUrl = await blobToBase64(audioBlob);
+                    console.log('🎙️ [Recording Stop] Setting recordedAudioUrl, length:', audioDataUrl.length);
                     setRecordedAudioUrl(audioDataUrl);
+                    
+                    // Generate AI voice preview
+                    try {
+                        console.log('🎵 [Preview] Starting AI voice generation for preview...');
+                        
+                        // Convert data URL back to Blob for speech-to-text
+                        const base64Audio = audioDataUrl.split(',')[1];
+                        const binaryData = atob(base64Audio);
+                        const arrayBuffer = new ArrayBuffer(binaryData.length);
+                        const view = new Uint8Array(arrayBuffer);
+                        for (let i = 0; i < binaryData.length; i++) {
+                            view[i] = binaryData.charCodeAt(i);
+                        }
+                        const previewBlob = new Blob([arrayBuffer], { type: 'audio/mp4' });
+                        
+                        // Get text transcription
+                        const { uploadSpeechToText } = await import('../utils/speechUtils');
+                        const transcribedText = await uploadSpeechToText(previewBlob);
+                        console.log('🎵 [Preview] Transcribed text for preview:', transcribedText);
+                        
+                        // Get user's voice profile for preview
+                        const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
+                        if (userVoice) {
+                            // Use the same voice processing service as voice page for consistency
+                            const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                            const availableEffects = voiceProcessingService.getAvailableEffects();
+                            const effect = availableEffects.find(e => e.id === userVoice);
+                            
+                            if (effect) {
+                                console.log('🎵 [Preview] Processing voice with effect:', effect.name);
+                                const result = await voiceProcessingService.processVoice(previewBlob, effect);
+                                if (result.success && result.audioUrl) {
+                                    console.log('🎵 [Preview] AI voice generated for preview using user voice:', userVoice);
+                                    setPreviewAudioUrl(result.audioUrl);
+                                } else {
+                                    console.warn('🎵 [Preview] Voice processing failed:', result.error);
+                                    setPreviewAudioUrl(audioDataUrl);
+                                }
+                            } else {
+                                console.warn('🎵 [Preview] Voice effect not found:', userVoice);
+                                setPreviewAudioUrl(audioDataUrl);
+                            }
+                        } else {
+                            console.warn('🎵 [Preview] No user voice available, using original recording');
+                            setPreviewAudioUrl(audioDataUrl);
+                        }
+                    } catch (error) {
+                        console.error('🎵 [Preview] Failed to generate AI voice preview:', error);
+                        setPreviewAudioUrl(audioDataUrl); // Fallback to original
+                    }
                     
                     setIsRecording(false);
                     if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
@@ -425,6 +497,7 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
 
     const handleDeleteRecording = () => {
         setRecordedAudioUrl(null);
+        setPreviewAudioUrl(null);
     };
     
     const getMessageStyle = (msg: Message): CSSProperties => {
@@ -477,9 +550,10 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
         }
     
         if (recordedAudioUrl) {
+            console.log('🎵 [UI] Showing Send button for recorded audio');
             return (
                 <div style={inputContainerStyle}>
-                    <AudioPlayer src={recordedAudioUrl} context="preview" />
+                    <AudioPlayer src={previewAudioUrl || recordedAudioUrl} context="preview" />
                     <span style={{flex: 1}}></span>
                     <button style={{...iconButtonStyle, fontSize: '20px'}} onClick={handleDeleteRecording}>🗑️</button>
                     <button style={{...getButtonStyle(), background: '#38A169'}} onClick={handleSendVoice}>Send</button>
@@ -507,12 +581,44 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
     };
 
     return (
-        <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>
+        <>
+            <style jsx>{`
+                .rpg-chat-container::-webkit-scrollbar {
+                    width: 8px;
+                }
+                .rpg-chat-container::-webkit-scrollbar-track {
+                    background: rgba(44, 52, 80, 0.5);
+                    border-radius: 10px;
+                }
+                .rpg-chat-container::-webkit-scrollbar-thumb {
+                    background: rgba(123, 97, 255, 0.6);
+                    border-radius: 10px;
+                }
+                .rpg-chat-container::-webkit-scrollbar-thumb:hover {
+                    background: rgba(123, 97, 255, 0.8);
+                }
+            `}</style>
+            <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '16px'}}>
                 <h2 style={{margin: 0}}>🗨️ {gameState.currentPhase === 'finalDecision' ? 'Final Decision' : `Round ${gameState.round}`}</h2>
                 <span style={{fontSize: '14px', color: '#b0b8d0'}}>{gameState.currentPhase === 'chat' && `${MAX_MESSAGES_PER_ROUND-playerMessageCount} / ${MAX_MESSAGES_PER_ROUND} messages left`}</span>
             </div>
-            <div style={{ height: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 10px', marginBottom: '16px' }}>
+            <div 
+                ref={chatContainerRef}
+                style={{ 
+                    height: '300px', 
+                    overflowY: 'auto', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '12px', 
+                    padding: '0 10px', 
+                    marginBottom: '16px',
+                    // Custom scrollbar styles (same as Profile Bubble) - Firefox support
+                    scrollbarWidth: 'thin' as const,
+                    scrollbarColor: 'rgba(123, 97, 255, 0.6) rgba(44, 52, 80, 0.5)'
+                }}
+                className="rpg-chat-container"
+            >
                 {gameState.chatLog.map((msg: Message, index: number) => (
                     <div key={index} style={{ opacity: msg.round !== gameState.round ? 0.6 : 1, ...getMessageStyle(msg) }}>
                         {msg.type === 'voice' ? <AudioPlayer src={msg.content} context="chat" /> : msg.content}
@@ -526,6 +632,7 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn }: { gameState: Game
                 </div>
             )}
         </div>
+        </>
     );
 };
 
@@ -677,14 +784,23 @@ export default function RPGPage() {
     }, [gameState, playerProfile]);
 
     const handleSendMessage = async (content: string, type: 'text' | 'voice' = 'text') => {
-        if (!botFullProfile) return;
+        console.log('📨 [handleSendMessage] Called with:', { type, content: content.length + ' chars', botFullProfile: !!botFullProfile });
+        
+        if (!botFullProfile) {
+            console.warn('📨 [handleSendMessage] No botFullProfile, returning');
+            return;
+        }
         const playerMessageCount = gameState.chatLog.filter(m => m.senderId === 'player1' && m.round === gameState.round).length;
-        if (playerMessageCount >= MAX_MESSAGES_PER_ROUND || gameState.currentPhase !== 'chat') return;
+        if (playerMessageCount >= MAX_MESSAGES_PER_ROUND || gameState.currentPhase !== 'chat') {
+            console.warn('📨 [handleSendMessage] Cannot send message:', { playerMessageCount, MAX_MESSAGES_PER_ROUND, currentPhase: gameState.currentPhase });
+            return;
+        }
     
         let textForAI: string = '';
         let userMessage: Message;
     
         if (type === 'voice') {
+            let aiVoiceUrl: string = content; // fallback to original audio
             try {
                 // Convert data URL back to Blob
                 const base64Audio = content.split(',')[1];
@@ -696,14 +812,66 @@ export default function RPGPage() {
                 }
                 const audioBlob = new Blob([arrayBuffer], { type: 'audio/webm' });
                 
-                // Use unified speech-to-text upload function
+                // Step 1: Use unified speech-to-text upload function
                 const { uploadSpeechToText } = await import('../utils/speechUtils');
                 textForAI = await uploadSpeechToText(audioBlob);
+                
+                // Step 2: Generate AI voice using the transcribed text with user's voice
+                if (textForAI && textForAI.trim()) {
+                    console.log("🎤 Generating AI voice for transcribed text:", textForAI);
+                    
+                    // Use user's selected voice for AI synthesis with voice processing service
+                    const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
+                    const voiceToUse = userVoice || 'elevenlabs-aria'; // fallback voice
+                    console.log("🎵 Using user voice:", voiceToUse);
+                    
+                    try {
+                        const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                        const availableEffects = voiceProcessingService.getAvailableEffects();
+                        const effect = availableEffects.find(e => e.id === voiceToUse);
+                        
+                        if (effect) {
+                            console.log('🎵 [Send] Processing voice with effect:', effect.name);
+                            const result = await voiceProcessingService.processVoice(audioBlob, effect);
+                            if (result.success && result.audioUrl) {
+                                aiVoiceUrl = result.audioUrl;
+                                console.log("✅ AI voice generated successfully with user's voice using voiceProcessingService");
+                            } else {
+                                console.warn("⚠️ Voice processing failed:", result.error);
+                                // Fallback to utils/voiceUtils method
+                                const { playUserVoice } = await import('../utils/voiceUtils');
+                                const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                                if (fallbackUrl) {
+                                    aiVoiceUrl = fallbackUrl;
+                                    console.log("✅ AI voice generated with fallback method");
+                                }
+                            }
+                        } else {
+                            console.warn('🎵 [Send] Voice effect not found, using fallback method');
+                            // Fallback to utils/voiceUtils method
+                            const { playUserVoice } = await import('../utils/voiceUtils');
+                            const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                            if (fallbackUrl) {
+                                aiVoiceUrl = fallbackUrl;
+                                console.log("✅ AI voice generated with fallback method");
+                            }
+                        }
+                    } catch (voiceProcessingError) {
+                        console.warn("⚠️ Voice processing service failed:", voiceProcessingError);
+                        // Fallback to utils/voiceUtils method
+                        const { playUserVoice } = await import('../utils/voiceUtils');
+                        const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                        if (fallbackUrl) {
+                            aiVoiceUrl = fallbackUrl;
+                            console.log("✅ AI voice generated with fallback method");
+                        }
+                    }
+                }
             } catch (error: any) {
-                console.error("Speech-to-text error:", error);
+                console.error("Speech-to-text or AI voice generation error:", error);
                 textForAI = `[Voice message failed to process: ${error.message}]`;
             }
-            userMessage = { senderId: 'player1', content: content, type, round: gameState.round, timestamp: Date.now(), senderName: "You", transcribedText: textForAI };
+            userMessage = { senderId: 'player1', content: aiVoiceUrl, type, round: gameState.round, timestamp: Date.now(), senderName: "You", transcribedText: textForAI };
         } else { // type is 'text'
             textForAI = content;
             userMessage = { senderId: 'player1', content: content, type, round: gameState.round, timestamp: Date.now(), senderName: "You" };
@@ -721,11 +889,20 @@ export default function RPGPage() {
                 } else if (msg.type === 'voice') {
                     msgContent = msg.transcribedText || '[Voice message]';
                 }
-                return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: `${msg.senderName}: ${msgContent}` };
+                // Remove name prefix from history to prevent AI from including names in responses
+                return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: msgContent };
             }).slice(-10); // Truncate history here
     
             const aiResponse = await aiService.generateRpgResponse(botFullProfile, STORY_BACKGROUND, botSideMission, historyForAI);
-            dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'player2', content: aiResponse.text, type: 'text', round: gameState.round, timestamp: Date.now(), senderName: botFullProfile.name } });
+            
+            // Clean up AI response to remove any name prefix that might still exist
+            let cleanedResponse = aiResponse.text;
+            const namePrefix = `${botFullProfile.name}:`;
+            if (cleanedResponse.startsWith(namePrefix)) {
+                cleanedResponse = cleanedResponse.substring(namePrefix.length).trim();
+            }
+            
+            dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'player2', content: cleanedResponse, type: 'text', round: gameState.round, timestamp: Date.now(), senderName: botFullProfile.name } });
         } catch (error: any) {
             console.error("AI opponent response error:", error);
             dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'system', content: `(System Error: The opponent's AI failed to respond. ${error.message})`, type: 'system', round: gameState.round, timestamp: Date.now(), senderName: 'System' } });
@@ -835,11 +1012,20 @@ export default function RPGPage() {
                         const botSideMission = gameState.sideMissions.player2.find(m => m.round === gameState.round) || null;
                         const historyForAI = gameState.chatLog.map(msg => {
                             let msgContent = msg.type === 'voice' ? msg.transcribedText || '[Voice message]' : msg.content;
-                            return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: `${msg.senderName}: ${msgContent}` };
+                            // Remove name prefix from history to prevent AI from including names in responses
+                            return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: msgContent };
                         }).slice(-10);
                         
                         const aiResponse = await aiService.generateRpgResponse(botFullProfile, STORY_BACKGROUND, botSideMission, historyForAI);
-                        dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'player2', content: aiResponse.text, type: 'text', round: gameState.round, timestamp: Date.now(), senderName: botFullProfile.name } });
+                        
+                        // Clean up AI response to remove any name prefix that might still exist
+                        let cleanedResponse = aiResponse.text;
+                        const namePrefix = `${botFullProfile.name}:`;
+                        if (cleanedResponse.startsWith(namePrefix)) {
+                            cleanedResponse = cleanedResponse.substring(namePrefix.length).trim();
+                        }
+                        
+                        dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'player2', content: cleanedResponse, type: 'text', round: gameState.round, timestamp: Date.now(), senderName: botFullProfile.name } });
                     } catch (error: any) {
                         console.error("AI opponent opening message error:", error);
                         dispatch({ type: 'ADD_MESSAGE', payload: { senderId: 'system', content: `(System Error: The opponent's AI failed to respond. ${error.message})`, type: 'system', round: gameState.round, timestamp: Date.now(), senderName: 'System' } });
@@ -919,7 +1105,7 @@ export default function RPGPage() {
                             <RPGGameGuide />
                             <ScriptLoader story={STORY_BACKGROUND} playerProfile={playerProfile} mission={missionData} />
                             <OpponentProfileCard opponentProfile={opponentProfile} />
-                            <DialogueArea gameState={gameState} onSendMessage={handleSendMessage} onEndTurn={handleEndTurn} />
+                            <DialogueArea gameState={gameState} onSendMessage={handleSendMessage} onEndTurn={handleEndTurn} opponentProfile={opponentProfile} />
                             
                             {gameState.currentPhase !== 'finalDecision' && <SideQuestTracker mission={gameState.sideMissions.player1.find((m: SideMission) => m.round === gameState.round)} />}
 

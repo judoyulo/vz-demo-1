@@ -5,23 +5,23 @@ import { AIVoiceSettings } from "../types";
 export const VOICE_MAPPING: Record<string, string> = {
   // Core user voices (used in mockUsers.ts)
   "elevenlabs-aria": "9BWtsMINqrJLrRacOk9x",      // Aria - Female, warm
-  "elevenlabs-domi": "AZnzlk1XvdvUeBnXmlld",     // Domi - Female, energetic  
+  "elevenlabs-domi": "TxGEqnHWrfWFTfGW9XjX",     // Domi - Male, professional (corrected)
   "elevenlabs-bella": "EXAVITQu4vr4xnSDxMaL",    // Bella - Female, soft
   "elevenlabs-echo": "pNInz6obpgDQGcFmaJgB",     // Echo - Male, deep (corrected)
   
   // Professional female voices (synchronized with lib/voiceProcessing.ts)
   "elevenlabs-rachel": "21m00Tcm4TlvDq8ikWAM",   // Rachel - Professional female
-  "elevenlabs-sarah": "VR6AewLTigWG4xSOukaG",    // Sarah - Professional female
+  "elevenlabs-sarah": "kdmDKE6EkgrWrrykO9Qt",    // Sarah - Professional female (corrected to Alexandra's realistic young female voice)
   "elevenlabs-emily": "AZnzlk1XvdvUeBnXmlld",    // Emily - Professional female
   
   // Professional male voices (synchronized with lib/voiceProcessing.ts)
-  "elevenlabs-arnold": "VR6AewLTigWG4xSOukaG",   // Arnold - Professional male
+  "elevenlabs-arnold": "pNInz6obpgDQGcFmaJgB",   // Arnold - Professional male (corrected)
   "elevenlabs-josh": "TxGEqnHWrfWFTfGW9XjX",     // Josh - Professional male
   "elevenlabs-sam": "yoZ06aMxZJJ28mfd3POQ",      // Sam - Professional male
   
   // Character voices (synchronized with lib/voiceProcessing.ts)
   "elevenlabs-dorothy": "ThT5KcBeYPX3keUQqHPh",  // Dorothy - Character voice
-  "elevenlabs-charlie": "VR6AewLTigWG4xSOukaG",  // Charlie - Character voice
+  "elevenlabs-charlie": "2EiwWnXFnvU5JabPnv8n",  // Charlie - Character voice (corrected)
   "elevenlabs-lily": "EXAVITQu4vr4xnSDxMaL",     // Lily - Character voice
   "elevenlabs-tommy": "yoZ06aMxZJJ28mfd3POQ",    // Tommy - Character voice
   

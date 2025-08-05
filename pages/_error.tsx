@@ -2,17 +2,13 @@ import React from "react";
 import { NextPageContext } from "next";
 
 interface ErrorProps {
-  statusCode?: number;
+  statusCode: number;
   hasGetInitialPropsRun?: boolean;
   err?: Error;
 }
 
 function Error({ statusCode, hasGetInitialPropsRun, err }: ErrorProps) {
-  // Ensure we always have a fallback statusCode
-  const finalStatusCode = statusCode || 500;
-  
   React.useEffect(() => {
-    // Log error details for debugging
     if (err) {
       console.error('Error page rendered with error:', err);
     }
@@ -22,13 +18,13 @@ function Error({ statusCode, hasGetInitialPropsRun, err }: ErrorProps) {
   }, [err, hasGetInitialPropsRun]);
 
   const getErrorMessage = () => {
-    switch (finalStatusCode) {
+    switch (statusCode) {
       case 404:
         return "This page could not be found.";
       case 500:
         return "Internal server error occurred.";
       default:
-        return finalStatusCode >= 400 && finalStatusCode < 500
+        return statusCode >= 400 && statusCode < 500
           ? "A client-side error occurred."
           : "A server-side error occurred.";
     }
@@ -63,7 +59,7 @@ function Error({ statusCode, hasGetInitialPropsRun, err }: ErrorProps) {
       >
         <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
         <h1 style={{ fontSize: "28px", fontWeight: "700", margin: "0 0 10px 0" }}>
-          {finalStatusCode} - Error
+          {statusCode} - Error
         </h1>
         <p style={{ fontSize: "16px", color: "rgba(255,255,255,0.8)", margin: "0 0 20px 0" }}>
           {getErrorMessage()}
@@ -105,7 +101,6 @@ function Error({ statusCode, hasGetInitialPropsRun, err }: ErrorProps) {
           </button>
         </div>
 
-        {/* Development mode error details */}
         {process.env.NODE_ENV === 'development' && err && (
           <details style={{
             marginTop: "24px",
@@ -133,10 +128,16 @@ function Error({ statusCode, hasGetInitialPropsRun, err }: ErrorProps) {
   );
 }
 
-Error.getInitialProps = ({ res, err }: NextPageContext) => {
-  const statusCode = res ? res.statusCode : err ? err.statusCode : 404;
+Error.getInitialProps = ({ res, err }: NextPageContext): ErrorProps => {
+  let statusCode;
+  if (res) {
+    statusCode = res.statusCode;
+  } else if (err && (err as any).statusCode) {
+    statusCode = (err as any).statusCode;
+  } else {
+    statusCode = 404;
+  }
   
-  // Log that getInitialProps ran
   console.log('Error.getInitialProps called with statusCode:', statusCode);
   
   return { 
