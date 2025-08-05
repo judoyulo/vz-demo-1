@@ -223,9 +223,9 @@ export const playAudioWithContext = async (audioBlob: Blob | string): Promise<vo
   } catch (error) {
     console.error("🍎 [AudioContext] ❌ FATAL ERROR:", error);
     console.error("🍎 [AudioContext] Error details:", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     });
     
     // Clean up on error
