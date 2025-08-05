@@ -22,23 +22,32 @@ export default async function handler(
 
     console.log('🔊 ElevenLabs TTS request:', { text: text.substring(0, 50) + '...', voiceId });
 
+    const requestBody = {
+      text: text,
+      model_id: 'eleven_multilingual_v2', // Using a more recent model
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+      },
+    };
+
+    const requestHeaders = {
+      'Accept': 'audio/mpeg',
+      'Content-Type': 'application/json',
+      'xi-api-key': elevenLabsApiKey,
+    };
+
+    console.log("🔍 Sending to ElevenLabs API...");
+    console.log("- URL:", `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`);
+    console.log("- Headers:", JSON.stringify(requestHeaders, null, 2));
+    console.log("- Body:", JSON.stringify(requestBody, null, 2));
+
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         method: 'POST',
-        headers: {
-          'Accept': 'audio/mpeg',
-          'Content-Type': 'application/json',
-          'xi-api-key': elevenLabsApiKey,
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.5,
-          },
-        }),
+        headers: requestHeaders,
+        body: JSON.stringify(requestBody),
       }
     );
 
