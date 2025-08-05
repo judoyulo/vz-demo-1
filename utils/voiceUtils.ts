@@ -183,7 +183,9 @@ export const playAudioWithContext = async (audioBlob: Blob | string): Promise<vo
       
       // CRITICAL: Start playback
       console.log("🍎 [AudioContext] 🚀 STARTING PLAYBACK NOW...");
-      console.log("🍎 [AudioContext] Context state before start:", audioContext.state);
+      if (audioContext) {
+        console.log("🍎 [AudioContext] Context state before start:", audioContext.state);
+      }
       
       try {
         source.start(0);
@@ -192,7 +194,9 @@ export const playAudioWithContext = async (audioBlob: Blob | string): Promise<vo
         console.log("🍎 [AudioContext] 🎵 Audio should now be playing...");
         
         // Log current time to verify context is active
-        console.log("🍎 [AudioContext] Current time:", audioContext.currentTime);
+        if (audioContext) {
+          console.log("🍎 [AudioContext] Current time:", audioContext.currentTime);
+        }
         
         // Monitor context state every 100ms for debugging
         const stateMonitor = setInterval(() => {
