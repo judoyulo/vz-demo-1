@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 运行API安全检查..."
+node scripts/check-api-leak.js
+
+if [ $? -ne 0 ]; then
+  echo "❌ API安全检查失败，提交被阻止"
+  echo "请修复安全问题后重新提交"
+  exit 1
+fi
+
+echo "✅ API安全检查通过"

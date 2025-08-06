@@ -25,11 +25,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Local development
+# Environment variables - 永远不要提交到Git!
+.env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# API密钥和敏感信息
+**/api-keys.json
+**/secrets.json
 
 # macOS
 .DS_Store

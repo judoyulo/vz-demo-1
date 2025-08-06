@@ -345,11 +345,15 @@ export default function App() {
       return;
     }
 
-    if (type === 'play' && userProfile && target && details?.voice) {
-      if (target === 'voice' && userProfile.voiceIntroText) {
-        playAIVoice(userProfile.voiceIntroText, details.voice, true);
-      } else if (target === 'mood' && userProfile.moodVoiceText) {
-        playAIVoice(userProfile.moodVoiceText, details.voice, true);
+    if (type === 'play' && target && details?.voice) {
+      // Get the current AI Bot profile being viewed
+      const currentAIBot = MOCK_USERS[currentUserIndex];
+      if (target === 'voice' && currentAIBot.voiceIntroText) {
+        console.log('🎵 Playing AI Bot voice intro for:', currentAIBot.name, 'with voice:', currentAIBot.voice);
+        playAIVoice(currentAIBot.voiceIntroText, currentAIBot.voice, true);
+      } else if (target === 'mood' && currentAIBot.moodVoiceText) {
+        console.log('🎵 Playing AI Bot mood voice for:', currentAIBot.name, 'with voice:', currentAIBot.voice);
+        playAIVoice(currentAIBot.moodVoiceText, currentAIBot.voice, true);
       }
       return;
     }
@@ -371,23 +375,41 @@ export default function App() {
       return;
     }
 
-    if (autoplay) {
-      try {
-        const voiceId = getVoiceId(voice);
-        const audioUrl = await speakWithElevenLabs(text, voiceId, false);
-        if (audioUrl) {
+    try {
+      // Use backend API for all voice generation
+      console.log("🎵 Using backend API for voice generation");
+      const voiceId = getVoiceId(voice);
+      console.log(`🎤 Voice mapping: ${voice} → ${voiceId}`);
+      
+      const ttsResponse = await fetch('/api/elevenlabs-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: text, 
+          voiceId: voiceId 
+        })
+      });
+      
+      if (ttsResponse.ok) {
+        const audioBlob = await ttsResponse.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        console.log("✅ AI voice generated via backend API");
+        
+        if (autoplay) {
           console.log("Playing AI voice from URL:", audioUrl);
           const audio = new Audio(audioUrl);
           await audio.play();
           console.log("✅ AI voice played successfully.");
         }
-      } catch (error) {
-        console.error("❌ Error playing AI voice:", error);
+        
+        return audioUrl;
+      } else {
+        const errorData = await ttsResponse.json();
+        throw new Error(errorData.error || 'Backend TTS API failed');
       }
-    } else {
-      playUserVoice(text, voice, false).catch((error) => {
-        console.error('Error generating voice:', error);
-      });
+    } catch (error) {
+      console.error("❌ Error with backend AI voice:", error);
+      // No fallback to keep consistent with other pages
     }
   };
 
@@ -489,8 +511,9 @@ export default function App() {
         // Create AI voice message
         console.log('🎤 AI will send voice clip');
         
-        // Generate the voice and get the URL
-        const voiceAudioUrl = await playUserVoice(aiResponse, aiUser.voice, false); // autoplay is false
+        // Generate the voice and get the URL using backend API
+        console.log('🎵 Generating AI voice clip for:', aiUser.name, 'with voice ID:', aiUser.voice);
+        const voiceAudioUrl = await playAIVoice(aiResponse, aiUser.voice, false); // Use our updated backend function
 
         aiMessage = {
           id: `ai-${Date.now()}-${Math.random()}`,
@@ -600,29 +623,54 @@ export default function App() {
         
         try {
           let selectedVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
-          const { voiceProcessingService } = await import('../lib/voiceProcessing');
-          const availableEffects = voiceProcessingService.getAvailableEffects();
           
-          if (!selectedVoice || !availableEffects.find(effect => effect.id === selectedVoice)) {
+          if (!selectedVoice || !selectedVoice.startsWith("elevenlabs-")) {
             selectedVoice = "elevenlabs-aria";
             if (typeof window !== 'undefined') localStorage.setItem("selectedVoice", selectedVoice);
           }
-          
-          const selectedEffect = availableEffects.find(effect => effect.id === selectedVoice);
-          if (!selectedEffect) throw new Error(`Voice effect not found: ${selectedVoice}`);
 
           const { createAudioBlob } = await import('../utils/mediaRecorderUtils');
           const audioBlob = createAudioBlob(recordedChunks);
 
-          const result = await voiceProcessingService.processVoice(audioBlob, selectedEffect);
-
-          if (result.success && result.audioUrl) {
-            console.log("Playing processed audio from URL:", result.audioUrl);
-            const audio = new Audio(result.audioUrl);
+          // Step 1: Transcribe audio to text
+          console.log("🎤 Step 1: Transcribing audio to text...");
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'recording.mp4');
+          
+          const speechToTextResponse = await fetch('/api/speech-to-text', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!speechToTextResponse.ok) {
+            throw new Error('Speech-to-text conversion failed');
+          }
+          
+          const speechResult = await speechToTextResponse.json();
+          const transcribedText = speechResult.text;
+          console.log("✅ Transcribed text:", transcribedText.substring(0, 50) + '...');
+          
+          // Step 2: Generate AI voice using backend API
+          console.log("🎵 Step 2: Generating AI voice...");
+          const voiceId = getVoiceId(selectedVoice);
+          const ttsResponse = await fetch('/api/elevenlabs-tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              text: transcribedText, 
+              voiceId: voiceId 
+            })
+          });
+          
+          if (ttsResponse.ok) {
+            const audioBlob = await ttsResponse.blob();
+            const processedUrl = URL.createObjectURL(audioBlob);
+            console.log("Playing processed audio from URL:", processedUrl);
+            const audio = new Audio(processedUrl);
             await audio.play();
             console.log("✅ Processed audio played successfully.");
           } else {
-            throw new Error(result.error || "Voice processing failed, falling back.");
+            throw new Error('Backend TTS API failed');
           }
         } catch (error) {
           console.error('❌ Error playing AI voice, falling back to original:', error);
@@ -654,49 +702,50 @@ export default function App() {
         
         import('../utils/speechUtils').then(({ uploadSpeechToText }) => {
           return uploadSpeechToText(audioBlob);
-        }).then(recognizedText => {
+        }).then(async (recognizedText) => {
           console.log('[DEBUG] 🎤 Recognized text from voice:', recognizedText);
           
           let selectedVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
           console.log(`[DEBUG] Retrieved selectedVoice from localStorage: ${selectedVoice}`);
           
-          return import('../lib/voiceProcessing').then(({ voiceProcessingService }) => {
-            const availableEffects = voiceProcessingService.getAvailableEffects();
-            
-            if (!selectedVoice || !availableEffects.find(effect => effect.id === selectedVoice)) {
-              selectedVoice = "elevenlabs-aria";
-              console.log(`[DEBUG] ⚠️ No voice selected or invalid voice, using default: ${selectedVoice}`);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem("selectedVoice", selectedVoice);
-              }
+          // Process voice using backend API (like other pages)
+          if (!selectedVoice || !selectedVoice.startsWith("elevenlabs-")) {
+            selectedVoice = "elevenlabs-aria";
+            console.log(`[DEBUG] ⚠️ No ElevenLabs voice selected, using default: ${selectedVoice}`);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem("selectedVoice", selectedVoice);
             }
+          }
+          
+          let finalAudioUrl = recordedAudioUrl;
+          
+          // Generate AI voice using backend API
+          try {
+            console.log(`[DEBUG] Using backend API for voice processing with voice: ${selectedVoice}`);
+            const voiceId = getVoiceId(selectedVoice);
             
-            const userVoiceEffect = availableEffects.find(effect => effect.id === selectedVoice);
-            let finalAudioUrl = recordedAudioUrl;
+            const ttsResponse = await fetch('/api/elevenlabs-tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                text: recognizedText, 
+                voiceId: voiceId 
+              })
+            });
             
-            if (userVoiceEffect) {
-              console.log(`[DEBUG] Found voice effect: ${userVoiceEffect.name}. Provider: ${userVoiceEffect.apiProvider}`);
-              console.log(`[DEBUG] Audio blob to process - Size: ${audioBlob.size}, Type: ${audioBlob.type}`);
-              
-              return voiceProcessingService.processVoice(audioBlob, userVoiceEffect).then(processedResult => {
-                console.log('[DEBUG] Voice processing result:', processedResult);
-                if (processedResult.success && processedResult.audioUrl) {
-                  finalAudioUrl = processedResult.audioUrl;
-                  console.log(`[DEBUG] Voice processed successfully. New URL: ${finalAudioUrl}`);
-                } else {
-                  console.error('[DEBUG] AI voice processing failed. Using original audio.', processedResult.error);
-                }
-                return { recognizedText, finalAudioUrl };
-              }).catch(error => {
-                console.error('[DEBUG] Exception during voice processing:', error);
-                console.log('[DEBUG] Falling back to original audio due to exception');
-                return { recognizedText, finalAudioUrl };
-              });
+            if (ttsResponse.ok) {
+              const audioBlob = await ttsResponse.blob();
+              finalAudioUrl = URL.createObjectURL(audioBlob);
+              console.log(`[DEBUG] Voice processed successfully via backend API. New URL: ${finalAudioUrl}`);
             } else {
-              console.log('[DEBUG] No AI voice effect found for the selected voice. Using original audio.');
-              return { recognizedText, finalAudioUrl };
+              console.error('[DEBUG] Backend TTS API failed. Using original audio.');
             }
-          });
+          } catch (error) {
+            console.error('[DEBUG] Exception during backend voice processing:', error);
+            console.log('[DEBUG] Falling back to original audio due to exception');
+          }
+          
+          return { recognizedText, finalAudioUrl };
         }).then(({ recognizedText, finalAudioUrl }) => {
           const userVoiceMessage: ChatMessage = {
             id: `user-voice-${Date.now()}-${Math.random()}`,

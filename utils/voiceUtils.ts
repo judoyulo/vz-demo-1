@@ -3,16 +3,16 @@ import { AIVoiceSettings } from "../types";
 // Voice mapping from user voice names to ElevenLabs voice IDs
 // ⚠️ CRITICAL: Keep this synchronized with lib/voiceProcessing.ts
 export const VOICE_MAPPING: Record<string, string> = {
-  // Core user voices (used in mockUsers.ts)
-  "elevenlabs-aria": "9BWtsMINqrJLrRacOk9x",      // Aria - Female, warm
-  "elevenlabs-domi": "TxGEqnHWrfWFTfGW9XjX",     // Domi - Male, professional (corrected)
-  "elevenlabs-bella": "EXAVITQu4vr4xnSDxMaL",    // Bella - Female, soft
-  "elevenlabs-echo": "pNInz6obpgDQGcFmaJgB",     // Echo - Male, deep (corrected)
+  // Core user voices (used in mockUsers.ts) - UNIQUE IDs for each AI Bot
+  "elevenlabs-aria": "9BWtsMINqrJLrRacOk9x",      // Sarah (Aria) - Female, warm
+  "elevenlabs-domi": "L0Dsvb3SLTyegXwtm47J",      // Alex (Domi) - Male, British analytical (Archer)
+  "elevenlabs-bella": "EXAVITQu4vr4xnSDxMaL",     // Maya (Bella) - Female, soft
+  "elevenlabs-echo": "HDA9tsk27wYi3uq0fPcK",      // Jordan (Echo) - Deep energetic Australian (Stuart)
   
   // Professional female voices (synchronized with lib/voiceProcessing.ts)
   "elevenlabs-rachel": "21m00Tcm4TlvDq8ikWAM",   // Rachel - Professional female
-  "elevenlabs-sarah": "kdmDKE6EkgrWrrykO9Qt",    // Sarah - Professional female (corrected to Alexandra's realistic young female voice)
-  "elevenlabs-emily": "AZnzlk1XvdvUeBnXmlld",    // Emily - Professional female
+  "elevenlabs-sarah": "kdmDKE6EkgrWrrykO9Qt",    // Sarah - Professional female (Alexandra)
+  "elevenlabs-emily": "g6xIsTj2HwM6VR4iXFCw",    // Emily - Professional female (Jessica Anne Bogart)
   
   // Professional male voices (synchronized with lib/voiceProcessing.ts)
   "elevenlabs-arnold": "pNInz6obpgDQGcFmaJgB",   // Arnold - Professional male (corrected)

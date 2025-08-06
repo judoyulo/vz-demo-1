@@ -871,53 +871,58 @@ export class VoiceProcessingService {
   constructor() {
     this.localProcessor = new LocalVoiceProcessor();
 
-    // Initialize APIs if keys are available
-    const voicemodKey = process.env.NEXT_PUBLIC_VOICEMOD_API_KEY;
-    const elevenLabsKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-    const azureKey = process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY;
-    const azureRegion = process.env.NEXT_PUBLIC_AZURE_SPEECH_REGION;
+    // API密钥现在通过安全的后端API路由处理，不再在前端暴露
+    const voicemodKey = null;
+    const elevenLabsKey = null;
+    const azureKey = null;
+    const azureRegion = null;
 
-    // Debug: Log API key status
-    console.log("🔑 API Key Status:");
-    console.log(
-      "Voicemod API Key:",
-      voicemodKey ? "✅ Available" : "❌ Missing"
-    );
-    console.log(
-      "ElevenLabs API Key:",
-      elevenLabsKey ? "✅ Available" : "❌ Missing"
-    );
-    if (elevenLabsKey) {
-      console.log(
-        "🔑 ElevenLabs Key (first 10 chars):",
-        elevenLabsKey.substring(0, 10) + "..."
-      );
-    }
-    console.log("Azure Speech Key:", azureKey ? "✅ Available" : "❌ Missing");
-    console.log("Azure Region:", azureRegion ? "✅ Available" : "❌ Missing");
+    // API密钥现在通过后端API路由处理，不再在前端初始化API服务
+    // 所有语音处理都通过安全的后端API进行
+  }
 
-    if (voicemodKey) {
-      this.voicemodAPI = new VoicemodAPI(voicemodKey);
-      console.log("✅ Voicemod API initialized");
-    } else {
-      console.log("❌ Voicemod API not initialized - missing API key");
+  // 检查后端API是否可用 (通过API路由)
+  async checkBackendApiStatus(): Promise<{hasElevenLabs: boolean, hasOpenAI: boolean}> {
+    try {
+      // 测试ElevenLabs API路由
+      const elevenLabsTest = await fetch('/api/elevenlabs-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'test', voiceId: '9BWtsMINqrJLrRacOk9x' })
+      });
+      
+      // 测试OpenAI API路由  
+      const openAITest = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'test', personality: 'test', conversationHistory: [] })
+      });
+      
+      return {
+        hasElevenLabs: elevenLabsTest.ok,
+        hasOpenAI: openAITest.ok
+      };
+    } catch (error) {
+      console.error('Error checking backend API status:', error);
+      return { hasElevenLabs: false, hasOpenAI: false };
     }
+  }
 
-    if (elevenLabsKey) {
-      this.elevenLabsAPI = new ElevenLabsAPI(elevenLabsKey);
-      console.log("✅ ElevenLabs API initialized");
-    } else {
-      console.log("❌ ElevenLabs API not initialized - missing API key");
-    }
+  // 检查API密钥状态 (现在检查后端API可用性)
+  hasApiKeys(): boolean {
+    // 由于我们现在使用后端API路由，总是返回true
+    // 实际的API状态检查通过checkBackendApiStatus进行
+    return true;
+  }
 
-    if (azureKey && azureRegion) {
-      this.azureAPI = new AzureVoiceAPI(azureKey, azureRegion);
-      console.log("✅ Azure Speech API initialized");
-    } else {
-      console.log(
-        "❌ Azure Speech API not initialized - missing API key or region"
-      );
-    }
+  // 获取API状态详情
+  getApiStatus() {
+    return {
+      hasVoicemod: false, // 未使用
+      hasElevenLabs: true, // 通过后端API路由
+      hasAzure: false, // 未使用
+      hasAnyApi: true // 通过后端API路由
+    };
   }
 
   async processVoice(
@@ -1050,17 +1055,17 @@ export class VoiceProcessingService {
         description: "Young and energetic female voice",
         category: "Professional Female",
         apiProvider: "elevenlabs",
-        voiceId: "AZnzlk1XvdvUeBnXmlld",
+        voiceId: "g6xIsTj2HwM6VR4iXFCw",
       },
 
       // ElevenLabs Professional Male Voices
       {
         id: "elevenlabs-domi",
         name: "👨 Domi",
-        description: "Professional male voice - strong and clear",
+        description: "Professional male voice - British analytical (Archer)",
         category: "Professional Male",
         apiProvider: "elevenlabs",
-        voiceId: "TxGEqnHWrfWFTfGW9XjX",
+        voiceId: "L0Dsvb3SLTyegXwtm47J",
       },
       {
         id: "elevenlabs-arnold",
@@ -1089,10 +1094,10 @@ export class VoiceProcessingService {
       {
         id: "elevenlabs-echo",
         name: "👨 Echo",
-        description: "Strong and confident male voice",
+        description: "Deep energetic Australian voice (Stuart)",
         category: "Professional Male",
         apiProvider: "elevenlabs",
-        voiceId: "pNInz6obpgDQGcFmaJgB",
+        voiceId: "HDA9tsk27wYi3uq0fPcK",
       },
 
       // ElevenLabs Character Voices

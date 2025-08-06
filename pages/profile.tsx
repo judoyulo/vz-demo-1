@@ -10,6 +10,8 @@ import {
   getCardStyle,
   LAYOUT_CONFIG 
 } from "../utils/layoutConfig";
+import { speakWithElevenLabs } from "../utils/voiceUtils";
+import { getVoiceId } from "../utils/voiceUtils";
 
 // Voice options from professional voice processing service
 const VOICE_OPTIONS = [
@@ -468,72 +470,63 @@ export default function ProfilePage() {
         const blob = createAudioBlob(chunks);
         console.log("🎵 Audio blob created using unified utility");
 
-        // Process with AI voice if selected
-        if (profileData.voice) {
+        // Process with AI voice using backend API (like RPG page)
+        const selectedVoice = localStorage.getItem("selectedVoice") || "elevenlabs-aria";
+        if (selectedVoice && selectedVoice.startsWith("elevenlabs-")) {
           try {
-            console.log("🎭 Processing with AI voice:", profileData.voice);
-            const { VoiceProcessingService } = await import(
-              "../lib/voiceProcessing"
-            );
-            const voiceService = new VoiceProcessingService();
-
-            // Find the selected voice effect
-            const availableEffects = voiceService.getAvailableEffects();
-            const selectedEffect = availableEffects.find(
-              effect => effect.id === profileData.voice
-            );
-
-            if (selectedEffect) {
-              console.log(
-                "🎵 Processing audio with effect:",
-                selectedEffect.name
-              );
-              const result = await voiceService.processVoice(
-                blob,
-                selectedEffect
-              );
-
-              if (result.success && result.audioUrl) {
-                console.log("✅ AI voice processing successful");
-                const processedUrl = result.audioUrl;
-
-                if (type === "voice") {
-                  setEditData(prev => ({
-                    ...prev,
-                    voiceIntroUrl: processedUrl,
-                  }));
-                  setIsRecordingVoice(false);
-                } else {
-                  setEditData(prev => ({
-                    ...prev,
-                    moodVoiceUrl: processedUrl,
-                  }));
-                  setIsRecordingMood(false);
-                }
-              } else {
-                console.error("❌ AI voice processing failed:", result.error);
-                // Fallback to original audio
-                const url = URL.createObjectURL(blob);
-                if (type === "voice") {
-                  setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-                  setIsRecordingVoice(false);
-                } else {
-                  setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-                  setIsRecordingMood(false);
-                }
-              }
-            } else {
-              console.log(
-                "⚠️ Selected voice effect not found, using original audio"
-              );
-              const url = URL.createObjectURL(blob);
+            console.log("🎭 Processing with AI voice using backend API:", selectedVoice);
+            
+            // Step 1: Transcribe the audio to text using OpenAI Whisper via backend
+            console.log("🎤 Step 1: Transcribing audio to text...");
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.mp4');
+            
+            const speechToTextResponse = await fetch('/api/speech-to-text', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!speechToTextResponse.ok) {
+              throw new Error('Speech-to-text conversion failed');
+            }
+            
+            const speechResult = await speechToTextResponse.json();
+            const transcribedText = speechResult.text;
+            console.log("✅ Transcribed text:", transcribedText.substring(0, 50) + '...');
+            
+            // Step 2: Generate AI voice using the transcribed text via backend
+            console.log("🎵 Step 2: Generating AI voice...");
+            const voiceId = getVoiceId(selectedVoice);
+            const ttsResponse = await fetch('/api/elevenlabs-tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                text: transcribedText, 
+                voiceId: voiceId 
+              })
+            });
+            
+            if (ttsResponse.ok) {
+              const audioBlob = await ttsResponse.blob();
+              const processedUrl = URL.createObjectURL(audioBlob);
+              console.log("✅ AI voice processing successful");
+              
               if (type === "voice") {
-                setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
+                setEditData(prev => ({
+                  ...prev,
+                  voiceIntroUrl: processedUrl,
+                }));
                 setIsRecordingVoice(false);
               } else {
-                setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
+                setEditData(prev => ({
+                  ...prev,
+                  moodVoiceUrl: processedUrl,
+                }));
                 setIsRecordingMood(false);
               }
+            } else {
+              const errorData = await ttsResponse.json();
+              throw new Error(errorData.error || 'Backend TTS API failed');
             }
           } catch (error) {
             console.error("❌ Error processing with AI voice:", error);
@@ -548,7 +541,8 @@ export default function ProfilePage() {
             }
           }
         } else {
-          // No AI voice selected, use original audio
+          // No ElevenLabs voice selected, use original audio
+          console.log("⚠️ No ElevenLabs voice selected, using original audio");
           const url = URL.createObjectURL(blob);
           if (type === "voice") {
             setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
@@ -825,10 +819,28 @@ export default function ProfilePage() {
                 🎙️ Voice Intro
               </div>
               <button
-                onClick={() => {
-                  if (profileData.voiceIntroUrl) {
-                    const audio = new Audio(profileData.voiceIntroUrl);
-                    audio.play();
+                onClick={async () => {
+                  // Play AI voice intro using ElevenLabs TTS
+                  const voiceIntroText = profileData.voiceIntroText || 
+                    "Hello! This is my voice introduction. I'm excited to connect with you!";
+                  const selectedVoice = localStorage.getItem("selectedVoice") || "elevenlabs-aria";
+                  
+                  try {
+                    console.log(`🎵 Playing voice intro with voice: ${selectedVoice}`);
+                    const voiceId = getVoiceId(selectedVoice);
+                    const audioUrl = await speakWithElevenLabs(voiceIntroText, voiceId, false);
+                    if (audioUrl) {
+                      const audio = new Audio(audioUrl);
+                      await audio.play();
+                      console.log("✅ Voice intro played successfully");
+                    }
+                  } catch (error) {
+                    console.error("❌ Error playing voice intro:", error);
+                    // Fallback to original recorded voice if available
+                    if (profileData.voiceIntroUrl) {
+                      const audio = new Audio(profileData.voiceIntroUrl);
+                      audio.play();
+                    }
                   }
                 }}
                 style={{
@@ -908,10 +920,28 @@ export default function ProfilePage() {
                   🎙️ Mood Voice:
                 </div>
                 <button
-                  onClick={() => {
-                    if (profileData.moodVoiceUrl) {
-                      const audio = new Audio(profileData.moodVoiceUrl);
-                      audio.play();
+                  onClick={async () => {
+                    // Play AI mood voice using ElevenLabs TTS
+                    const moodVoiceText = profileData.moodVoiceText || 
+                      "This is how I'm feeling right now. Let's connect and share our vibes!";
+                    const selectedVoice = localStorage.getItem("selectedVoice") || "elevenlabs-aria";
+                    
+                    try {
+                      console.log(`🎵 Playing mood voice with voice: ${selectedVoice}`);
+                      const voiceId = getVoiceId(selectedVoice);
+                      const audioUrl = await speakWithElevenLabs(moodVoiceText, voiceId, false);
+                      if (audioUrl) {
+                        const audio = new Audio(audioUrl);
+                        await audio.play();
+                        console.log("✅ Mood voice played successfully");
+                      }
+                    } catch (error) {
+                      console.error("❌ Error playing mood voice:", error);
+                      // Fallback to original recorded voice if available
+                      if (profileData.moodVoiceUrl) {
+                        const audio = new Audio(profileData.moodVoiceUrl);
+                        audio.play();
+                      }
                     }
                   }}
                   style={{

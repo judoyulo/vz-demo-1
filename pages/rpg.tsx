@@ -439,30 +439,39 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn, opponentProfile }: 
                         const transcribedText = await uploadSpeechToText(previewBlob);
                         console.log('🎵 [Preview] Transcribed text for preview:', transcribedText);
                         
-                        // Get user's voice profile for preview
+                        // Get user's voice profile for preview and use backend API
                         const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
-                        if (userVoice) {
-                            // Use the same voice processing service as voice page for consistency
-                            const { voiceProcessingService } = await import('../lib/voiceProcessing');
-                            const availableEffects = voiceProcessingService.getAvailableEffects();
-                            const effect = availableEffects.find(e => e.id === userVoice);
-                            
-                            if (effect) {
-                                console.log('🎵 [Preview] Processing voice with effect:', effect.name);
-                                const result = await voiceProcessingService.processVoice(previewBlob, effect);
-                                if (result.success && result.audioUrl) {
-                                    console.log('🎵 [Preview] AI voice generated for preview using user voice:', userVoice);
-                                    setPreviewAudioUrl(result.audioUrl);
+                        console.log('🎵 [Preview] User voice from localStorage:', userVoice);
+                        if (userVoice && userVoice.startsWith("elevenlabs-") && transcribedText && transcribedText.trim()) {
+                            try {
+                                console.log('🎵 [Preview] Generating AI voice using backend API for:', userVoice);
+                                const { getVoiceId } = await import('../utils/voiceUtils');
+                                const voiceId = getVoiceId(userVoice);
+                                
+                                const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        text: transcribedText, 
+                                        voiceId: voiceId 
+                                    })
+                                });
+                                
+                                if (ttsResponse.ok) {
+                                    const audioBlob = await ttsResponse.blob();
+                                    const previewUrl = URL.createObjectURL(audioBlob);
+                                    setPreviewAudioUrl(previewUrl);
+                                    console.log('🎵 [Preview] AI voice generated for preview via backend API');
                                 } else {
-                                    console.warn('🎵 [Preview] Voice processing failed:', result.error);
+                                    console.warn('🎵 [Preview] Backend TTS failed, using original recording');
                                     setPreviewAudioUrl(audioDataUrl);
                                 }
-                            } else {
-                                console.warn('🎵 [Preview] Voice effect not found:', userVoice);
+                            } catch (error) {
+                                console.error('🎵 [Preview] Error with backend API:', error);
                                 setPreviewAudioUrl(audioDataUrl);
                             }
                         } else {
-                            console.warn('🎵 [Preview] No user voice available, using original recording');
+                            console.warn('🎵 [Preview] No ElevenLabs voice selected, using original recording');
                             setPreviewAudioUrl(audioDataUrl);
                         }
                     } catch (error) {
@@ -823,21 +832,30 @@ export default function RPGPage() {
                     // Use user's selected voice for AI synthesis with voice processing service
                     const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
                     const voiceToUse = userVoice || 'elevenlabs-aria'; // fallback voice
-                    console.log("🎵 Using user voice:", voiceToUse);
+                    console.log("🎵 [Send] User voice from localStorage:", userVoice);
+                    console.log("🎵 [Send] Using voice:", voiceToUse);
                     
                     try {
-                        const { voiceProcessingService } = await import('../lib/voiceProcessing');
-                        const availableEffects = voiceProcessingService.getAvailableEffects();
-                        const effect = availableEffects.find(e => e.id === voiceToUse);
-                        
-                        if (effect) {
-                            console.log('🎵 [Send] Processing voice with effect:', effect.name);
-                            const result = await voiceProcessingService.processVoice(audioBlob, effect);
-                            if (result.success && result.audioUrl) {
-                                aiVoiceUrl = result.audioUrl;
-                                console.log("✅ AI voice generated successfully with user's voice using voiceProcessingService");
+                        if (voiceToUse.startsWith("elevenlabs-")) {
+                            console.log('🎵 [Send] Generating AI voice using backend API for:', voiceToUse);
+                            const { getVoiceId } = await import('../utils/voiceUtils');
+                            const voiceId = getVoiceId(voiceToUse);
+                            
+                            const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    text: textForAI, 
+                                    voiceId: voiceId 
+                                })
+                            });
+                            
+                            if (ttsResponse.ok) {
+                                const aiAudioBlob = await ttsResponse.blob();
+                                aiVoiceUrl = URL.createObjectURL(aiAudioBlob);
+                                console.log("✅ AI voice generated successfully via backend API");
                             } else {
-                                console.warn("⚠️ Voice processing failed:", result.error);
+                                console.warn("⚠️ Backend TTS failed, using fallback method");
                                 // Fallback to utils/voiceUtils method
                                 const { playUserVoice } = await import('../utils/voiceUtils');
                                 const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
@@ -847,7 +865,7 @@ export default function RPGPage() {
                                 }
                             }
                         } else {
-                            console.warn('🎵 [Send] Voice effect not found, using fallback method');
+                            console.warn('🎵 [Send] Non-ElevenLabs voice, using fallback method');
                             // Fallback to utils/voiceUtils method
                             const { playUserVoice } = await import('../utils/voiceUtils');
                             const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
@@ -893,7 +911,28 @@ export default function RPGPage() {
                 return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: msgContent };
             }).slice(-10); // Truncate history here
     
-            const aiResponse = await aiService.generateRpgResponse(botFullProfile, STORY_BACKGROUND, botSideMission, historyForAI);
+            // Use backend API for AI response generation
+            console.log('🤖 Using backend API for RPG AI response generation');
+            const response = await fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: historyForAI[historyForAI.length - 1]?.content || 'Continue the conversation',
+                    personality: botFullProfile.name,
+                    conversationHistory: historyForAI.slice(0, -1) // Exclude the last message as it's included in message
+                })
+            });
+            
+            let aiResponseText;
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ RPG AI response generated via backend API');
+                aiResponseText = result.response;
+            } else {
+                throw new Error('Backend AI API failed for RPG response');
+            }
+            
+            const aiResponse = { text: aiResponseText };
             
             // Clean up AI response to remove any name prefix that might still exist
             let cleanedResponse = aiResponse.text;
@@ -916,7 +955,40 @@ export default function RPGPage() {
         dispatch({ type: 'SELECT_ACTION', payload: { playerId: 'player1', actionTag } });
         
         const botSideMission = gameState.sideMissions.player2.find(m => m.round === gameState.round) || null;
-        const botAction = await aiService.chooseRpgBotAction(botFullProfile, botSideMission, gameState.chatLog.slice(-10), ROUND_ACTIONS[gameState.round - 1]);
+        // Use backend API for bot action selection
+        console.log('🤖 Using backend API for RPG bot action selection');
+        let botAction = ROUND_ACTIONS[gameState.round - 1][0].tag; // Default fallback
+        try {
+            const actionPrompt = `Based on our conversation and your character, choose the best action from these options: ${ROUND_ACTIONS[gameState.round - 1].map(a => `${a.tag}: ${a.description}`).join(', ')}. Respond with only the action tag.`;
+            const actionResponse = await fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: actionPrompt,
+                    personality: botFullProfile.name,
+                    conversationHistory: gameState.chatLog.slice(-10).map(msg => ({
+                        role: msg.senderId === 'player1' ? 'user' : 'assistant',
+                        content: msg.type === 'text' ? msg.content : (msg.transcribedText || '[Voice message]')
+                    }))
+                })
+            });
+            
+            if (actionResponse.ok) {
+                const result = await actionResponse.json();
+                const selectedAction = result.response.trim().toLowerCase();
+                // Find matching action or default to first available
+                const validAction = ROUND_ACTIONS[gameState.round - 1].find(a => a.tag.toLowerCase() === selectedAction);
+                botAction = validAction ? validAction.tag : ROUND_ACTIONS[gameState.round - 1][0].tag;
+                console.log('✅ RPG bot action selected via backend API:', botAction);
+            } else {
+                throw new Error('Backend AI API failed for bot action selection');
+            }
+        } catch (error) {
+            console.error('❌ Error selecting bot action via backend:', error);
+            // Fallback to random action
+            botAction = ROUND_ACTIONS[gameState.round - 1][Math.floor(Math.random() * ROUND_ACTIONS[gameState.round - 1].length)].tag;
+            console.log('🎲 Using fallback random action:', botAction);
+        }
         dispatch({ type: 'SELECT_ACTION', payload: { playerId: 'player2', actionTag: botAction } });
     };
 
@@ -927,7 +999,38 @@ export default function RPGPage() {
         dispatch({ type: 'SET_MAIN_MISSION_SUCCESS', payload: choice.success });
     
         const availableChoices = FINAL_CHOICES[botFullProfile.background] || FINAL_CHOICES['Default'];
-        const botChoiceTag = await aiService.chooseRpgBotFinalChoice(botFullProfile, gameState.chatLog, availableChoices);
+        // Use backend API for bot final choice selection
+        console.log('🤖 Using backend API for RPG bot final choice selection');
+        let botChoiceTag;
+        try {
+            const choicePrompt = `Based on our conversation and your character, choose the best final decision from these options: ${availableChoices.map(c => `${c.tag}: ${c.label}`).join(', ')}. Respond with only the choice tag.`;
+            const choiceResponse = await fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: choicePrompt,
+                    personality: botFullProfile.name,
+                    conversationHistory: gameState.chatLog.slice(-10).map(msg => ({
+                        role: msg.senderId === 'player1' ? 'user' : 'assistant',
+                        content: msg.type === 'text' ? msg.content : (msg.transcribedText || '[Voice message]')
+                    }))
+                })
+            });
+            
+            if (choiceResponse.ok) {
+                const result = await choiceResponse.json();
+                const selectedChoice = result.response.trim().toLowerCase();
+                const validChoice = availableChoices.find(c => c.tag.toLowerCase() === selectedChoice);
+                botChoiceTag = validChoice ? validChoice.tag : availableChoices[0].tag;
+                console.log('✅ RPG bot final choice selected via backend API:', botChoiceTag);
+            } else {
+                throw new Error('Backend AI API failed for bot final choice selection');
+            }
+        } catch (error) {
+            console.error('❌ Error selecting bot final choice via backend:', error);
+            botChoiceTag = availableChoices[Math.floor(Math.random() * availableChoices.length)].tag;
+            console.log('🎲 Using fallback random final choice:', botChoiceTag);
+        }
         dispatch({ type: 'SELECT_ACTION', payload: { playerId: 'player2', actionTag: botChoiceTag } });
     };
 
@@ -940,7 +1043,36 @@ export default function RPGPage() {
                 const opponentActionInfo = ROUND_ACTIONS[gameState.round - 1]?.find(a => a.tag === player2);
                 
                 if (playerActionInfo && opponentActionInfo) {
-                    const combinedEffectText = await aiService.generateNarration(playerActionInfo, opponentActionInfo, playerProfile, botFullProfile, STORY_BACKGROUND, gameState.round, gameState.chatLog.slice(-10));
+                    // Use backend API for narration generation
+                    console.log('🤖 Using backend API for RPG narration generation');
+                    let combinedEffectText;
+                    try {
+                        const narrationPrompt = `Generate a narrative describing the outcome of these actions in our RPG scenario: Player chose "${playerActionInfo.label}" and opponent chose "${opponentActionInfo.label}". Keep it brief and dramatic.`;
+                        const narrationResponse = await fetch('/api/ai-chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: narrationPrompt,
+                                personality: 'Narrator',
+                                conversationHistory: gameState.chatLog.slice(-10).map(msg => ({
+                                    role: msg.senderId === 'player1' ? 'user' : 'assistant',
+                                    content: msg.type === 'text' ? msg.content : (msg.transcribedText || '[Voice message]')
+                                }))
+                            })
+                        });
+                        
+                        if (narrationResponse.ok) {
+                            const result = await narrationResponse.json();
+                            combinedEffectText = result.response;
+                            console.log('✅ RPG narration generated via backend API');
+                        } else {
+                            throw new Error('Backend AI API failed for narration generation');
+                        }
+                    } catch (error) {
+                        console.error('❌ Error generating narration via backend:', error);
+                        combinedEffectText = `The tension builds as both players make their moves. ${playerActionInfo.label} meets ${opponentActionInfo.label} in an unexpected turn of events.`;
+                        console.log('📖 Using fallback narration');
+                    }
                     
                     const narrativeContent = `🧾 Round ${gameState.round} Action Outcome:\n\n` +
                                              `🎭 You chose: ${playerActionInfo.label}\n` +
@@ -1016,7 +1148,28 @@ export default function RPGPage() {
                             return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: msgContent };
                         }).slice(-10);
                         
-                        const aiResponse = await aiService.generateRpgResponse(botFullProfile, STORY_BACKGROUND, botSideMission, historyForAI);
+                        // Use backend API for AI response generation (opening message)
+                        console.log('🤖 Using backend API for RPG AI opening message generation');
+                        const response = await fetch('/api/ai-chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: "Start the conversation as your character",
+                                personality: botFullProfile.name,
+                                conversationHistory: historyForAI
+                            })
+                        });
+                        
+                        let aiResponseText;
+                        if (response.ok) {
+                            const result = await response.json();
+                            console.log('✅ RPG AI opening message generated via backend API');
+                            aiResponseText = result.response;
+                        } else {
+                            throw new Error('Backend AI API failed for RPG opening message');
+                        }
+                        
+                        const aiResponse = { text: aiResponseText };
                         
                         // Clean up AI response to remove any name prefix that might still exist
                         let cleanedResponse = aiResponse.text;
@@ -1040,7 +1193,37 @@ export default function RPGPage() {
         if (gameState.isScoring || gameState.finalScore || !playerProfile) return;
         dispatch({ type: 'START_SCORING' });
         
-        const perfScoreResult = await aiService.scorePerformance(playerProfile, gameState.chatLog);
+        // Use backend API for performance scoring
+        console.log('🤖 Using backend API for RPG performance scoring');
+        let perfScoreResult;
+        try {
+            const scoringPrompt = `Rate this player's performance in our RPG scenario on a scale of 1-10 based on their conversation skills, strategy, and character roleplay. Respond with just a number.`;
+            const scoringResponse = await fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: scoringPrompt,
+                    personality: 'Judge',
+                    conversationHistory: gameState.chatLog.map(msg => ({
+                        role: msg.senderId === 'player1' ? 'user' : 'assistant',
+                        content: msg.type === 'text' ? msg.content : (msg.transcribedText || '[Voice message]')
+                    }))
+                })
+            });
+            
+            if (scoringResponse.ok) {
+                const result = await scoringResponse.json();
+                const score = parseInt(result.response.trim()) || 5;
+                perfScoreResult = { totalScore: Math.max(1, Math.min(10, score)) };
+                console.log('✅ RPG performance scored via backend API:', perfScoreResult.totalScore);
+            } else {
+                throw new Error('Backend AI API failed for performance scoring');
+            }
+        } catch (error) {
+            console.error('❌ Error scoring performance via backend:', error);
+            perfScoreResult = { totalScore: 5 }; // Neutral fallback score
+            console.log('🎲 Using fallback performance score:', perfScoreResult.totalScore);
+        }
         const perfScore = Math.round(perfScoreResult.totalScore);
         const sideMissionScore = gameState.sideMissions.player1.filter(m => m.success).length;
         const totalScore = (gameState.mainMissionSuccess ? 3 : 0) + sideMissionScore + perfScore;

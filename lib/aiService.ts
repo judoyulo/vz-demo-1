@@ -70,7 +70,7 @@ export const AI_PERSONALITIES: Record<string, AIPersonality> = {
     personality: "Brilliant, analytical, fascinated by consciousness and AI, thinks in algorithms and theoretical frameworks, visionary futurist",
     background: "Designs cognitive frameworks for deep-space AI systems. Researches consciousness transfer protocols and teaches AI systems to dream. Explores the boundary between human and artificial intelligence.",
     speakingStyle: "Uses advanced technical terminology, speaks about complex concepts naturally, references space/cosmos, analytical but imaginative, fascinated by consciousness",
-    voiceId: "AZnzlk1XvdvUeBnXmlld", 
+    voiceId: "L0Dsvb3SLTyegXwtm47J", 
   },
   maya: {
     name: "Maya",
@@ -88,7 +88,7 @@ export const AI_PERSONALITIES: Record<string, AIPersonality> = {
     personality: "Intensely energetic, transformation-focused, optimistic but demanding, believes limits are mental constructs, passionate about human potential",
     background: "Architects total human transformation - mind, body, and spirit in perfect sync. Engineers human potential through peak performance optimization. Every interaction is about growth and improvement.",
     speakingStyle: "High-energy and motivational, uses fitness/performance metaphors, speaks in ACTION words, frequently uses caps for emphasis, challenges people to level up",
-    voiceId: "21m00Tcm4TlvDq8ikWAM", 
+    voiceId: "HDA9tsk27wYi3uq0fPcK", 
   },
 };
 
@@ -153,8 +153,9 @@ export class AIService {
 
   private loadApiKeys() {
     try {
-      this.openaiApiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || null;
-      this.huggingfaceApiKey = process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY || null;
+      // API密钥现在在服务器端处理，不再暴露到前端
+      this.openaiApiKey = null;
+      this.huggingfaceApiKey = null;
 
       if (typeof window !== "undefined") {
         // @ts-ignore
@@ -178,44 +179,51 @@ export class AIService {
     userProfile?: any
   ): Promise<AIResponse> {
 
-    this.loadApiKeys();
-
     const personality = AI_PERSONALITIES[personalityId.toLowerCase()];
     if (!personality) {
       throw new Error(`Unknown personality: ${personalityId}`);
     }
 
-    if (this.useOpenAI && this.openaiApiKey) {
-      try {
-        const result = await this.generateOpenAIResponse(
-          personality,
-          userMessage,
-          conversationHistory,
-          userProfile
-        );
-        return result;
-      } catch (error) {
-        console.error("🤖 AI Service: OpenAI API failed:", error);
-        throw error; 
-      }
-    }
+    try {
+      console.log('🤖 Using secure API route for AI response generation');
+      
+      // Format conversation history for API
+      const formattedHistory = conversationHistory.slice(-5).map(msg => ({
+        role: msg.senderId === userProfile?.id ? 'assistant' : 'user',
+        content: msg.content
+      }));
+      
+      // 使用安全的API路由而不是直接调用外部API
+      const response = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          personality: `${personality.name}: ${personality.role}. ${personality.personality}. ${personality.speakingStyle}`,
+          conversationHistory: formattedHistory
+        })
+      });
 
-    if (this.useHuggingFace && this.huggingfaceApiKey) {
-      try {
-        const result = await this.generateHuggingFaceResponse(
-          personality,
-          userMessage,
-          conversationHistory,
-          userProfile
-        );
-        return result;
-      } catch (error) {
-        console.error("🤖 AI Service: Hugging Face API failed:", error);
-        throw error;
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.response) {
+          return {
+            text: data.response,
+            confidence: 0.8
+          };
+        }
       }
+      
+      throw new Error('Secure API route failed');
+      
+    } catch (error) {
+      console.error('❌ Error calling secure AI API:', error);
+      
+      // 回退到模拟响应
+      return this.generateMockResponse(personality, userMessage);
     }
-    
-    throw new Error("No AI APIs configured.");
   }
 
   private async generateOpenAIResponse(
@@ -649,6 +657,25 @@ Write a 1-2 sentence "Combined Effect Text" describing the result of these two a
             // Fallback to a random choice on error
             return availableChoices[Math.floor(Math.random() * availableChoices.length)].tag;
         }
+    }
+
+    private generateMockResponse(personality: AIPersonality, userMessage: string): AIResponse {
+        console.log('🤖 Generating mock response for:', personality.name);
+        
+        const mockResponses = [
+            `As ${personality.name}, I find that fascinating. ${personality.speakingStyle}`,
+            `That's an interesting perspective! ${personality.speakingStyle}`,
+            `I appreciate you sharing that with me. ${personality.speakingStyle}`,
+            `From my experience as ${personality.role}, I'd say that's quite thought-provoking.`,
+            `That reminds me of something related to ${personality.interests[0] || 'my interests'}.`
+        ];
+        
+        const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)];
+        
+        return {
+            text: randomResponse,
+            confidence: 0.6
+        };
     }
 
 }

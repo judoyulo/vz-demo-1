@@ -5,7 +5,7 @@ export async function uploadSpeechToText(audioBlob: Blob): Promise<string> {
 
   // Create FormData for file upload
   const formData = new FormData();
-  formData.append('file', audioBlob, 'voice.webm');
+  formData.append('audio', audioBlob, 'voice.mp4');
 
   console.log('📡 [uploadSpeechToText] Sending to /api/speech-to-text...');
 

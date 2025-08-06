@@ -16,15 +16,14 @@ export default async function handler(
       return res.status(400).json({ error: 'Text and voiceId are required' });
     }
 
-    // 🔧 CRITICAL FIX: Map voice name to actual ElevenLabs voice ID
-    const voiceId = getVoiceId(rawVoiceId);
-    console.log('🔧 [DEPLOYMENT FIX] Voice mapping:', { 
-      received: rawVoiceId, 
-      mapped: voiceId,
-      isCorrectFormat: voiceId.length > 10 && !voiceId.startsWith('elevenlabs-')
+    // Use the voice ID directly (frontend already provides ElevenLabs voice ID)
+    const voiceId = rawVoiceId;
+    console.log('🔧 [VOICE ID] Using voice ID:', { 
+      voiceId: voiceId,
+      isValidFormat: voiceId.length > 10 && !voiceId.startsWith('elevenlabs-')
     });
 
-    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || "sk_7dd57adca9fa825ffcd9dff1e997ca8996fc2ce975b9521f";
+    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
     if (!elevenLabsApiKey) {
       return res.status(500).json({ error: 'ElevenLabs API key not configured' });
     }

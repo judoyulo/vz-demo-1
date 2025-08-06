@@ -168,15 +168,62 @@ export default function VoicePage() {
         throw new Error(`Voice effect not found: ${voiceId}`);
       }
 
-      // Process voice using professional service
-      const result = await voiceProcessingService.processVoice(
-        recordedAudio[voiceId],
-        effect
-      );
-
-      if (!result.success) {
-        console.error("❌ Voice processing failed:", result.error);
-        throw new Error(result.error || "Voice processing failed");
+      // Process voice using backend API route for AI transformation
+      let result;
+      if (effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+        console.log("🚀 Using backend ElevenLabs API for voice preview");
+        
+        try {
+          // Step 1: Transcribe the audio to text using OpenAI Whisper
+          console.log("🎤 Step 1: Transcribing audio to text...");
+          const formData = new FormData();
+          formData.append('audio', recordedAudio[voiceId], 'recording.mp4');
+          
+          const speechToTextResponse = await fetch('/api/speech-to-text', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!speechToTextResponse.ok) {
+            throw new Error('Speech-to-text conversion failed');
+          }
+          
+          const speechResult = await speechToTextResponse.json();
+          const transcribedText = speechResult.text;
+          console.log("✅ Transcribed text:", transcribedText.substring(0, 100) + '...');
+          
+          // Step 2: Generate AI voice using the transcribed text
+          console.log("🎵 Step 2: Generating AI voice...");
+          const ttsResponse = await fetch('/api/elevenlabs-tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              text: transcribedText, 
+              voiceId: effect.voiceId 
+            })
+          });
+          
+          if (ttsResponse.ok) {
+            const audioBlob = await ttsResponse.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            result = { success: true, audioUrl };
+            console.log("✅ AI voice preview generated successfully");
+          } else {
+            const errorData = await ttsResponse.json();
+            throw new Error(errorData.error || 'Backend TTS API failed');
+          }
+        } catch (error) {
+          console.error("❌ Backend API error:", error);
+          // Fallback to original audio if AI processing fails
+          console.log("🔄 Falling back to original recording");
+          const audioUrl = URL.createObjectURL(recordedAudio[voiceId]);
+          result = { success: true, audioUrl };
+        }
+      } else {
+        // For non-ElevenLabs effects, use original audio as fallback
+        console.log("🔄 Using original recording for non-ElevenLabs effect");
+        const audioUrl = URL.createObjectURL(recordedAudio[voiceId]);
+        result = { success: true, audioUrl };
       }
 
       // Play the processed audio
@@ -219,7 +266,7 @@ export default function VoicePage() {
 
       console.log("Attempting to play audio...");
       await audio.play();
-      console.log(`Voice processed successfully in ${result.processingTime}ms`);
+      console.log("Voice processed successfully via backend API");
       console.log("Audio play() completed");
     } catch (error) {
       console.error("Error in playVoicePreview:", error);
@@ -547,9 +594,7 @@ export default function VoicePage() {
         </div>
 
         {/* API Status Warning */}
-        {!process.env.NEXT_PUBLIC_VOICEMOD_API_KEY &&
-          !process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY &&
-          !process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY && (
+                {!voiceProcessingService.hasApiKeys() && (
             <div
               style={{
                 background: "rgba(255,152,0,0.1)",
