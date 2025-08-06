@@ -20,7 +20,16 @@ export const generateAIResponse = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: userMessage,
-        personality: userProfile.name,
+        personality: `You are ${userProfile.name}, a character in a casual chat conversation. You must stay completely in character.
+
+### CHARACTER PROFILE:
+- **Name**: ${userProfile.name}
+- **Background**: ${userProfile.role.background}
+- **Social Role**: ${userProfile.role.socialRole}
+- **Personality**: ${userProfile.role.personality}
+
+### RESPONSE STYLE:
+Keep your responses casual, conversational, and natural. Use everyday language and speak like a real person. Be friendly and engaging.`,
         conversationHistory: formattedHistory
       })
     });
