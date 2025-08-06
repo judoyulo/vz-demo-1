@@ -508,50 +508,51 @@ export default function ProfilePage() {
             console.log("🎵 Step 2: Generating AI voice...");
             
             if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
-              const ttsResponse = await fetch('/api/elevenlabs-tts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  text: transcribedText, 
-                  voiceId: effect.voiceId 
-                })
-              });
-            
-              if (ttsResponse.ok) {
-                const audioBlob = await ttsResponse.blob();
-                const processedUrl = URL.createObjectURL(audioBlob);
-                console.log("✅ AI voice processing successful");
-                
+              try {
+                const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    text: transcribedText, 
+                    voiceId: effect.voiceId 
+                  })
+                });
+              
+                if (ttsResponse.ok) {
+                  const audioBlob = await ttsResponse.blob();
+                  const processedUrl = URL.createObjectURL(audioBlob);
+                  console.log("✅ AI voice processing successful");
+                  
+                  if (type === "voice") {
+                    setEditData(prev => ({
+                      ...prev,
+                      voiceIntroUrl: processedUrl,
+                    }));
+                    setIsRecordingVoice(false);
+                  } else {
+                    setEditData(prev => ({
+                      ...prev,
+                      moodVoiceUrl: processedUrl,
+                    }));
+                    setIsRecordingMood(false);
+                  }
+                } else {
+                  const errorData = await ttsResponse.json();
+                  throw new Error(errorData.error || 'Backend TTS API failed');
+                }
+              } catch (error) {
+                console.error("❌ Error processing with AI voice:", error);
+                // Fallback to original audio
+                const url = URL.createObjectURL(blob);
                 if (type === "voice") {
-                  setEditData(prev => ({
-                    ...prev,
-                    voiceIntroUrl: processedUrl,
-                  }));
+                  setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
                   setIsRecordingVoice(false);
                 } else {
-                  setEditData(prev => ({
-                    ...prev,
-                    moodVoiceUrl: processedUrl,
-                  }));
+                  setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
                   setIsRecordingMood(false);
                 }
-              } else {
-                const errorData = await ttsResponse.json();
-                throw new Error(errorData.error || 'Backend TTS API failed');
               }
-          } catch (error) {
-            console.error("❌ Error processing with AI voice:", error);
-            // Fallback to original audio
-            const url = URL.createObjectURL(blob);
-            if (type === "voice") {
-              setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-              setIsRecordingVoice(false);
-            } else {
-              setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-              setIsRecordingMood(false);
-            }
-          }
-        } else if (effect && effect.apiProvider === 'local') {
+        } else if (effect && (effect.apiProvider as string) === 'local') {
           // Process with Local Effect
           try {
             console.log("🎛️ Processing with Local Effect:", selectedVoice);
@@ -564,13 +565,13 @@ export default function ProfilePage() {
               if (type === "voice") {
                 setEditData(prev => ({
                   ...prev,
-                  voiceIntroUrl: localResult.audioUrl,
+                  voiceIntroUrl: localResult.audioUrl || null,
                 }));
                 setIsRecordingVoice(false);
               } else {
                 setEditData(prev => ({
                   ...prev,
-                  moodVoiceUrl: localResult.audioUrl,
+                  moodVoiceUrl: localResult.audioUrl || null,
                 }));
                 setIsRecordingMood(false);
               }
@@ -604,6 +605,18 @@ export default function ProfilePage() {
 
         stream.getTracks().forEach(track => track.stop());
         console.log("🎤 Microphone released");
+      } catch (error) {
+        console.error("❌ Error in recording processing:", error);
+        // Fallback to original audio
+        const url = URL.createObjectURL(blob);
+        if (type === "voice") {
+          setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
+          setIsRecordingVoice(false);
+        } else {
+          setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
+          setIsRecordingMood(false);
+        }
+        stream.getTracks().forEach(track => track.stop());
       };
 
       recorder.onerror = event => {
@@ -889,7 +902,7 @@ export default function ProfilePage() {
                         await audio.play();
                         console.log("✅ ElevenLabs voice intro played successfully");
                       }
-                    } else if (effect && effect.apiProvider === 'local') {
+                    } else if (effect && (effect.apiProvider as string) === 'local') {
                       // For Local Effects in AI voice generation, we need to create a text-to-speech first, then apply local processing
                       const baseAudioUrl = await speakWithElevenLabs(voiceIntroText, '21m00Tcm4TlvDq8ikWAM', false);
                       
@@ -1023,7 +1036,7 @@ export default function ProfilePage() {
                           await audio.play();
                           console.log("✅ ElevenLabs mood voice played successfully");
                         }
-                      } else if (effect && effect.apiProvider === 'local') {
+                      } else if (effect && (effect.apiProvider as string) === 'local') {
                         // For Local Effects in AI voice generation, we need to create a text-to-speech first, then apply local processing
                         const baseAudioUrl = await speakWithElevenLabs(moodVoiceText, '21m00Tcm4TlvDq8ikWAM', false);
                         
