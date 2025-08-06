@@ -52,7 +52,9 @@ type ProfileData = {
   lookingFor: string;
   voice: string | null;
   voiceIntroUrl: string | null;
+  voiceIntroText: string | null;
   moodVoiceUrl: string | null;
+  moodVoiceText: string | null;
   tags: string[];
   mood: string;
   role: {
@@ -204,7 +206,9 @@ export default function ProfilePage() {
     lookingFor: "",
     voice: null,
     voiceIntroUrl: null,
+    voiceIntroText: null,
     moodVoiceUrl: null,
+    moodVoiceText: null,
     tags: [],
     mood: "browsing",
     role: { background: null, socialRole: null, personality: null },

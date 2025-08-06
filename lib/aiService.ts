@@ -211,6 +211,7 @@ export class AIService {
         if (data.success && data.response) {
           return {
             text: data.response,
+            shouldBeVoice: Math.random() < 0.7,
             confidence: 0.8
           };
         }
@@ -674,6 +675,7 @@ Write a 1-2 sentence "Combined Effect Text" describing the result of these two a
         
         return {
             text: randomResponse,
+            shouldBeVoice: Math.random() < 0.7,
             confidence: 0.6
         };
     }
