@@ -662,9 +662,9 @@ class LocalVoiceProcessor {
       `🎵 Applied pitch shift: ${pitchSettings.playbackRate}x playback rate (${pitchSettings.description})`
     );
 
-    // Set gain for more dramatic effect
-    gainNode.gain.value = 1.2; // Boost volume slightly
-    console.log(`🔊 Applied gain boost: 1.2x`);
+    // Set gain for more natural effect
+    gainNode.gain.value = 1.0; // Keep original volume
+    console.log(`🔊 Applied gain: 1.0x (original volume)`);
 
     // Connect the advanced processing chain
     console.log(`🔗 Connecting audio processing chain...`);
@@ -751,26 +751,50 @@ class LocalVoiceProcessor {
 
   public getPitchSettings(effectId: string) {
     const pitchConfigs = {
-      // Voicemod effects with enhanced local processing
-      "voicemod-female": {
-        playbackRate: 1.4,
-        description: "Female voice transformation - Enhanced local",
+      // Local Effects
+      "sweet-angel": {
+        playbackRate: 1.2,
+        description: "Slightly higher pitch for female transformation",
       },
-      "voicemod-male": {
+      "elegant-queen": {
+        playbackRate: 1.2,
+        description: "Medium-high pitch for mature female",
+      },
+      "noble-knight": {
         playbackRate: 0.7,
-        description: "Male voice transformation - Enhanced local",
+        description: "Lower pitch for male transformation",
       },
-      "voicemod-child": {
-        playbackRate: 1.6,
-        description: "Child voice transformation - Enhanced local",
+      "wise-sage": {
+        playbackRate: 0.6,
+        description: "Very low pitch for elder voice",
       },
-      "voicemod-elder": {
-        playbackRate: 0.5,
-        description: "Elder voice transformation - Enhanced local",
+      "crystal-clear": {
+        playbackRate: 1.0,
+        description: "Normal pitch with enhanced clarity",
       },
-      "voicemod-robot": {
+      "mysterious-siren": {
+        playbackRate: 0.85,
+        description: "Mysterious female voice",
+      },
+      "energetic-sunshine": {
+        playbackRate: 1.25,
+        description: "Energetic and bright voice",
+      },
+      "adventurous-explorer": {
+        playbackRate: 0.9,
+        description: "Adventurous male voice",
+      },
+      "gentle-artist": {
+        playbackRate: 1.0,
+        description: "Gentle and artistic voice",
+      },
+      "warm-embrace": {
+        playbackRate: 0.95,
+        description: "Warm and comforting voice",
+      },
+      "powerful-command": {
         playbackRate: 0.8,
-        description: "Robot voice effect - Enhanced local",
+        description: "Powerful and commanding voice",
       },
       "voicemod-echo": {
         playbackRate: 1.0,
@@ -802,22 +826,6 @@ class LocalVoiceProcessor {
         playbackRate: 0.6,
         description: "Arnold voice - Enhanced local",
       },
-
-      // Original local effects
-      "sweet-angel": {
-        playbackRate: 1.4,
-        description: "Higher pitch for female",
-      },
-      "elegant-queen": {
-        playbackRate: 1.2,
-        description: "Medium-high for mature female",
-      },
-      "noble-knight": {
-        playbackRate: 0.7,
-        description: "Lower pitch for male",
-      },
-      "wise-sage": { playbackRate: 0.6, description: "Very low for elder" },
-      "crystal-clear": { playbackRate: 1.0, description: "Normal pitch" },
     };
     return (
       pitchConfigs[effectId as keyof typeof pitchConfigs] || {

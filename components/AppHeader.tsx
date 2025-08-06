@@ -99,15 +99,28 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         }}
       >
         {navLinks.map((link) => (
-          <a
+          <button
             key={link.href}
-            href={link.href}
+            onClick={() => router.push(link.href)}
             className={`versez-tab-button ${
               currentPath === link.href ? "active" : ""
             }`}
+            style={{
+              background: "rgba(123,97,255,0.1)",
+              border: "1px solid rgba(123,97,255,0.3)",
+              borderRadius: "8px",
+              color: "#7b61ff",
+              padding: "8px 12px",
+              fontSize: "14px",
+              cursor: "pointer",
+              fontWeight: 500,
+              textDecoration: "none",
+              display: "inline-block",
+              transition: "all 0.2s ease"
+            }}
           >
             {link.label}
-          </a>
+          </button>
         ))}
       </div>
     </div>

@@ -52,7 +52,7 @@ export default async function handler(
             messages: [
               {
                 role: 'system',
-                content: personality ? `You are ${personality}. Respond in character.` : 'You are a helpful AI assistant.'
+                content: personality ? `${personality}\n\nYou are in an intense RPG scenario. Stay completely in character. Your responses should reflect your character's background, personality, and current mission. Be authentic and don't break character. Keep responses casual, conversational, and natural - speak like a real person in a tense situation.` : 'You are a helpful AI assistant.'
               },
               ...conversationHistory || [],
               {
@@ -60,8 +60,8 @@ export default async function handler(
                 content: message
               }
             ],
-            max_tokens: 150,
-            temperature: 0.7
+            max_tokens: 400,
+            temperature: 0.9
           })
         });
 

@@ -15,7 +15,7 @@ import {
   formatTimeAgo,
   getNotificationText,
 } from "../utils/helpers";
-import { speakWithElevenLabs, speakText, playUserVoice, playAudioFromUserClick, getVoiceId } from "../utils/voiceUtils";
+import { speakWithElevenLabs, speakText, playUserVoice, playAudioFromUserClick } from "../utils/voiceUtils";
 import { generateAIResponse } from "../utils/aiUtils";
 import { 
   getPageContainerStyle, 
@@ -376,39 +376,111 @@ export default function App() {
     }
 
     try {
-      // Use backend API for all voice generation
-      console.log("🎵 Using backend API for voice generation");
-      const voiceId = getVoiceId(voice);
-      console.log(`🎤 Voice mapping: ${voice} → ${voiceId}`);
+      // Get voice effect configuration
+      const { voiceProcessingService } = await import("../lib/voiceProcessing");
+      const availableEffects = voiceProcessingService.getAvailableEffects();
+      const effect = availableEffects.find(e => e.id === voice);
       
-      const ttsResponse = await fetch('/api/elevenlabs-tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: text, 
-          voiceId: voiceId 
-        })
-      });
-      
-      if (ttsResponse.ok) {
-        const audioBlob = await ttsResponse.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        console.log("✅ AI voice generated via backend API");
+      if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+        // Use backend API for ElevenLabs voice generation
+        console.log("🎵 Using backend API for ElevenLabs voice generation");
+        console.log(`🎤 Voice mapping: ${voice} → ${effect.voiceId}`);
         
-        if (autoplay) {
-          console.log("Playing AI voice from URL:", audioUrl);
-          const audio = new Audio(audioUrl);
-          await audio.play();
-          console.log("✅ AI voice played successfully.");
+        const ttsResponse = await fetch('/api/elevenlabs-tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            text: text, 
+            voiceId: effect.voiceId 
+          })
+        });
+        
+        if (ttsResponse.ok) {
+          const audioBlob = await ttsResponse.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          console.log("✅ ElevenLabs voice generated via backend API");
+          
+          if (autoplay) {
+            console.log("Playing ElevenLabs voice from URL:", audioUrl);
+            const audio = new Audio(audioUrl);
+            await audio.play();
+            console.log("✅ ElevenLabs voice played successfully.");
+          }
+          
+          return audioUrl;
+        } else {
+          const errorData = await ttsResponse.json();
+          throw new Error(errorData.error || 'Backend TTS API failed');
         }
+      } else if (effect && effect.apiProvider === 'local') {
+        // For Local Effects, we need to create a text-to-speech first, then apply local processing
+        console.log("🎛️ Using Local Effect for voice generation:", voice);
         
-        return audioUrl;
+        // First, generate base speech using a default voice
+        const baseTtsResponse = await fetch('/api/elevenlabs-tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            text: text, 
+            voiceId: '21m00Tcm4TlvDq8ikWAM' // Use Rachel as base voice
+          })
+        });
+        
+        if (baseTtsResponse.ok) {
+          const baseAudioBlob = await baseTtsResponse.blob();
+          
+          // Then apply local effect processing
+          const localResult = await voiceProcessingService.processVoice(baseAudioBlob, effect);
+          
+          if (localResult.success && localResult.audioUrl) {
+            console.log("✅ Local voice processing successful");
+            
+            if (autoplay) {
+              console.log("Playing Local Effect voice from URL:", localResult.audioUrl);
+              const audio = new Audio(localResult.audioUrl);
+              await audio.play();
+              console.log("✅ Local Effect voice played successfully.");
+            }
+            
+            return localResult.audioUrl;
+          } else {
+            throw new Error(localResult.error || 'Local processing failed');
+          }
+        } else {
+          throw new Error('Base TTS generation failed');
+        }
       } else {
-        const errorData = await ttsResponse.json();
-        throw new Error(errorData.error || 'Backend TTS API failed');
+        // Fallback to default ElevenLabs voice
+        console.log("⚠️ No specific voice effect found, using default ElevenLabs voice");
+        const ttsResponse = await fetch('/api/elevenlabs-tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            text: text, 
+            voiceId: '21m00Tcm4TlvDq8ikWAM' // Default to Rachel
+          })
+        });
+        
+        if (ttsResponse.ok) {
+          const audioBlob = await ttsResponse.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          console.log("✅ Default voice generated via backend API");
+          
+          if (autoplay) {
+            console.log("Playing default voice from URL:", audioUrl);
+            const audio = new Audio(audioUrl);
+            await audio.play();
+            console.log("✅ Default voice played successfully.");
+          }
+          
+          return audioUrl;
+        } else {
+          const errorData = await ttsResponse.json();
+          throw new Error(errorData.error || 'Backend TTS API failed');
+        }
       }
     } catch (error) {
-      console.error("❌ Error with backend AI voice:", error);
+      console.error("❌ Error with AI voice:", error);
       // No fallback to keep consistent with other pages
     }
   };
@@ -624,7 +696,7 @@ export default function App() {
         try {
           let selectedVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
           
-          if (!selectedVoice || !selectedVoice.startsWith("elevenlabs-")) {
+          if (!selectedVoice) {
             selectedVoice = "elevenlabs-aria";
             if (typeof window !== 'undefined') localStorage.setItem("selectedVoice", selectedVoice);
           }
@@ -652,26 +724,76 @@ export default function App() {
           
           // Step 2: Generate AI voice using backend API
           console.log("🎵 Step 2: Generating AI voice...");
-          const voiceId = getVoiceId(selectedVoice);
-          const ttsResponse = await fetch('/api/elevenlabs-tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              text: transcribedText, 
-              voiceId: voiceId 
-            })
-          });
           
-          if (ttsResponse.ok) {
-            const audioBlob = await ttsResponse.blob();
-            const processedUrl = URL.createObjectURL(audioBlob);
-            console.log("Playing processed audio from URL:", processedUrl);
-            const audio = new Audio(processedUrl);
-            await audio.play();
-            console.log("✅ Processed audio played successfully.");
+          // Get voice effect configuration
+          const { voiceProcessingService } = await import('../lib/voiceProcessing');
+          const availableEffects = voiceProcessingService.getAvailableEffects();
+          const effect = availableEffects.find(e => e.id === selectedVoice);
+          
+          let processedUrl: string;
+          
+          if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+            // Use backend API for ElevenLabs voice generation
+            console.log("🎵 Using backend API for ElevenLabs voice generation");
+            
+            const ttsResponse = await fetch('/api/elevenlabs-tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                text: transcribedText, 
+                voiceId: effect.voiceId 
+              })
+            });
+            
+            if (ttsResponse.ok) {
+              const audioBlob = await ttsResponse.blob();
+              processedUrl = URL.createObjectURL(audioBlob);
+              console.log("✅ ElevenLabs voice generated successfully via backend API");
+            } else {
+              throw new Error('Backend TTS API failed');
+            }
+          } else if (effect && effect.apiProvider === 'local') {
+            // For Local Effects, apply local processing directly to the original recording
+            console.log("🎛️ Using Local Effect for voice processing:", selectedVoice);
+            
+            // Get the original recorded audio blob
+            const { createAudioBlob } = require('../utils/mediaRecorderUtils');
+            const originalAudioBlob = createAudioBlob(recordedChunks);
+            
+            // Apply local effect processing directly to the original recording
+            const localResult = await voiceProcessingService.processVoice(originalAudioBlob, effect);
+            
+            if (localResult.success && localResult.audioUrl) {
+              processedUrl = localResult.audioUrl;
+              console.log("✅ Local Effect voice processed successfully");
+            } else {
+              throw new Error(localResult.error || 'Local processing failed');
+            }
           } else {
-            throw new Error('Backend TTS API failed');
+            // Fallback to default ElevenLabs voice
+            console.log("⚠️ No specific voice effect found, using default ElevenLabs voice");
+            const ttsResponse = await fetch('/api/elevenlabs-tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                text: transcribedText, 
+                voiceId: '21m00Tcm4TlvDq8ikWAM' // Default to Rachel
+              })
+            });
+            
+            if (ttsResponse.ok) {
+              const audioBlob = await ttsResponse.blob();
+              processedUrl = URL.createObjectURL(audioBlob);
+              console.log("✅ Default voice generated via backend API");
+            } else {
+              throw new Error('Backend TTS API failed');
+            }
           }
+          
+          console.log("Playing processed audio from URL:", processedUrl);
+          const audio = new Audio(processedUrl);
+          await audio.play();
+          console.log("✅ Processed audio played successfully.");
         } catch (error) {
           console.error('❌ Error playing AI voice, falling back to original:', error);
           try {
@@ -709,9 +831,9 @@ export default function App() {
           console.log(`[DEBUG] Retrieved selectedVoice from localStorage: ${selectedVoice}`);
           
           // Process voice using backend API (like other pages)
-          if (!selectedVoice || !selectedVoice.startsWith("elevenlabs-")) {
+          if (!selectedVoice) {
             selectedVoice = "elevenlabs-aria";
-            console.log(`[DEBUG] ⚠️ No ElevenLabs voice selected, using default: ${selectedVoice}`);
+            console.log(`[DEBUG] ⚠️ No voice selected, using default: ${selectedVoice}`);
             if (typeof window !== 'undefined') {
               localStorage.setItem("selectedVoice", selectedVoice);
             }
@@ -722,23 +844,68 @@ export default function App() {
           // Generate AI voice using backend API
           try {
             console.log(`[DEBUG] Using backend API for voice processing with voice: ${selectedVoice}`);
-            const voiceId = getVoiceId(selectedVoice);
             
-            const ttsResponse = await fetch('/api/elevenlabs-tts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                text: recognizedText, 
-                voiceId: voiceId 
-              })
-            });
+            // Get voice effect configuration
+            const { voiceProcessingService } = await import('../lib/voiceProcessing');
+            const availableEffects = voiceProcessingService.getAvailableEffects();
+            const effect = availableEffects.find(e => e.id === selectedVoice);
             
-            if (ttsResponse.ok) {
-              const audioBlob = await ttsResponse.blob();
-              finalAudioUrl = URL.createObjectURL(audioBlob);
-              console.log(`[DEBUG] Voice processed successfully via backend API. New URL: ${finalAudioUrl}`);
+            if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+              // Use backend API for ElevenLabs voice generation
+              console.log("🎵 Using backend API for ElevenLabs voice generation");
+              
+              const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  text: recognizedText, 
+                  voiceId: effect.voiceId 
+                })
+              });
+              
+              if (ttsResponse.ok) {
+                const audioBlob = await ttsResponse.blob();
+                finalAudioUrl = URL.createObjectURL(audioBlob);
+                console.log(`[DEBUG] ElevenLabs voice processed successfully via backend API. New URL: ${finalAudioUrl}`);
+              } else {
+                console.error('[DEBUG] Backend TTS API failed. Using original audio.');
+              }
+            } else if (effect && effect.apiProvider === 'local') {
+              // For Local Effects, apply local processing directly to the original recording
+              console.log("🎛️ Using Local Effect for voice processing:", selectedVoice);
+              
+              // Get the original recorded audio blob
+              const { createAudioBlob } = require('../utils/mediaRecorderUtils');
+              const originalAudioBlob = createAudioBlob(recordedChunks);
+              
+              // Apply local effect processing directly to the original recording
+              const localResult = await voiceProcessingService.processVoice(originalAudioBlob, effect);
+              
+              if (localResult.success && localResult.audioUrl) {
+                finalAudioUrl = localResult.audioUrl;
+                console.log(`[DEBUG] Local Effect voice processed successfully. New URL: ${finalAudioUrl}`);
+              } else {
+                throw new Error(localResult.error || 'Local processing failed');
+              }
             } else {
-              console.error('[DEBUG] Backend TTS API failed. Using original audio.');
+              // Fallback to default ElevenLabs voice
+              console.log("⚠️ No specific voice effect found, using default ElevenLabs voice");
+              const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  text: recognizedText, 
+                  voiceId: '21m00Tcm4TlvDq8ikWAM' // Default to Rachel
+                })
+              });
+              
+              if (ttsResponse.ok) {
+                const audioBlob = await ttsResponse.blob();
+                finalAudioUrl = URL.createObjectURL(audioBlob);
+                console.log(`[DEBUG] Default voice processed successfully via backend API. New URL: ${finalAudioUrl}`);
+              } else {
+                console.error('[DEBUG] Backend TTS API failed. Using original audio.');
+              }
             }
           } catch (error) {
             console.error('[DEBUG] Exception during backend voice processing:', error);

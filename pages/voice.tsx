@@ -219,9 +219,31 @@ export default function VoicePage() {
           const audioUrl = URL.createObjectURL(recordedAudio[voiceId]);
           result = { success: true, audioUrl };
         }
+      } else if (effect.apiProvider === 'local') {
+        // For Local Effects, apply local processing
+        console.log("🎛️ Using local voice processing for:", voiceId);
+        try {
+          const localResult = await voiceProcessingService.processVoice(
+            recordedAudio[voiceId],
+            effect
+          );
+          
+          if (localResult.success && localResult.audioUrl) {
+            result = localResult;
+            console.log("✅ Local voice processing successful");
+          } else {
+            throw new Error(localResult.error || 'Local processing failed');
+          }
+        } catch (error) {
+          console.error("❌ Local processing error:", error);
+          // Fallback to local voice preview function
+          console.log("🔄 Falling back to local voice preview function");
+          await playLocalVoicePreview(voiceId);
+          return; // Exit early since playLocalVoicePreview handles the UI
+        }
       } else {
-        // For non-ElevenLabs effects, use original audio as fallback
-        console.log("🔄 Using original recording for non-ElevenLabs effect");
+        // For other effects, use original audio as fallback
+        console.log("🔄 Using original recording for other effect");
         const audioUrl = URL.createObjectURL(recordedAudio[voiceId]);
         result = { success: true, audioUrl };
       }

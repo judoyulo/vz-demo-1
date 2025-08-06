@@ -11,7 +11,7 @@ import {
   LAYOUT_CONFIG 
 } from "../utils/layoutConfig";
 import { speakWithElevenLabs } from "../utils/voiceUtils";
-import { getVoiceId } from "../utils/voiceUtils";
+
 
 // Voice options from professional voice processing service
 const VOICE_OPTIONS = [
@@ -476,7 +476,13 @@ export default function ProfilePage() {
 
         // Process with AI voice using backend API (like RPG page)
         const selectedVoice = localStorage.getItem("selectedVoice") || "elevenlabs-aria";
-        if (selectedVoice && selectedVoice.startsWith("elevenlabs-")) {
+        
+        // Get voice effect configuration
+        const { voiceProcessingService } = await import("../lib/voiceProcessing");
+        const availableEffects = voiceProcessingService.getAvailableEffects();
+        const effect = availableEffects.find(e => e.id === selectedVoice);
+        
+        if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
           try {
             console.log("🎭 Processing with AI voice using backend API:", selectedVoice);
             
@@ -500,38 +506,39 @@ export default function ProfilePage() {
             
             // Step 2: Generate AI voice using the transcribed text via backend
             console.log("🎵 Step 2: Generating AI voice...");
-            const voiceId = getVoiceId(selectedVoice);
-            const ttsResponse = await fetch('/api/elevenlabs-tts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                text: transcribedText, 
-                voiceId: voiceId 
-              })
-            });
             
-            if (ttsResponse.ok) {
-              const audioBlob = await ttsResponse.blob();
-              const processedUrl = URL.createObjectURL(audioBlob);
-              console.log("✅ AI voice processing successful");
-              
-              if (type === "voice") {
-                setEditData(prev => ({
-                  ...prev,
-                  voiceIntroUrl: processedUrl,
-                }));
-                setIsRecordingVoice(false);
+            if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+              const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  text: transcribedText, 
+                  voiceId: effect.voiceId 
+                })
+              });
+            
+              if (ttsResponse.ok) {
+                const audioBlob = await ttsResponse.blob();
+                const processedUrl = URL.createObjectURL(audioBlob);
+                console.log("✅ AI voice processing successful");
+                
+                if (type === "voice") {
+                  setEditData(prev => ({
+                    ...prev,
+                    voiceIntroUrl: processedUrl,
+                  }));
+                  setIsRecordingVoice(false);
+                } else {
+                  setEditData(prev => ({
+                    ...prev,
+                    moodVoiceUrl: processedUrl,
+                  }));
+                  setIsRecordingMood(false);
+                }
               } else {
-                setEditData(prev => ({
-                  ...prev,
-                  moodVoiceUrl: processedUrl,
-                }));
-                setIsRecordingMood(false);
+                const errorData = await ttsResponse.json();
+                throw new Error(errorData.error || 'Backend TTS API failed');
               }
-            } else {
-              const errorData = await ttsResponse.json();
-              throw new Error(errorData.error || 'Backend TTS API failed');
-            }
           } catch (error) {
             console.error("❌ Error processing with AI voice:", error);
             // Fallback to original audio
@@ -544,9 +551,47 @@ export default function ProfilePage() {
               setIsRecordingMood(false);
             }
           }
+        } else if (effect && effect.apiProvider === 'local') {
+          // Process with Local Effect
+          try {
+            console.log("🎛️ Processing with Local Effect:", selectedVoice);
+            
+            const localResult = await voiceProcessingService.processVoice(blob, effect);
+            
+            if (localResult.success && localResult.audioUrl) {
+              console.log("✅ Local voice processing successful");
+              
+              if (type === "voice") {
+                setEditData(prev => ({
+                  ...prev,
+                  voiceIntroUrl: localResult.audioUrl,
+                }));
+                setIsRecordingVoice(false);
+              } else {
+                setEditData(prev => ({
+                  ...prev,
+                  moodVoiceUrl: localResult.audioUrl,
+                }));
+                setIsRecordingMood(false);
+              }
+            } else {
+              throw new Error(localResult.error || 'Local processing failed');
+            }
+          } catch (error) {
+            console.error("❌ Error processing with Local Effect:", error);
+            // Fallback to original audio
+            const url = URL.createObjectURL(blob);
+            if (type === "voice") {
+              setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
+              setIsRecordingVoice(false);
+            } else {
+              setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
+              setIsRecordingMood(false);
+            }
+          }
         } else {
-          // No ElevenLabs voice selected, use original audio
-          console.log("⚠️ No ElevenLabs voice selected, using original audio");
+          // No voice effect selected, use original audio
+          console.log("⚠️ No voice effect selected, using original audio");
           const url = URL.createObjectURL(blob);
           if (type === "voice") {
             setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
@@ -831,12 +876,45 @@ export default function ProfilePage() {
                   
                   try {
                     console.log(`🎵 Playing voice intro with voice: ${selectedVoice}`);
-                    const voiceId = getVoiceId(selectedVoice);
-                    const audioUrl = await speakWithElevenLabs(voiceIntroText, voiceId, false);
-                    if (audioUrl) {
-                      const audio = new Audio(audioUrl);
-                      await audio.play();
-                      console.log("✅ Voice intro played successfully");
+                    
+                    // Get voice effect configuration
+                    const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                    const availableEffects = voiceProcessingService.getAvailableEffects();
+                    const effect = availableEffects.find(e => e.id === selectedVoice);
+                    
+                    if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+                      const audioUrl = await speakWithElevenLabs(voiceIntroText, effect.voiceId, false);
+                      if (audioUrl) {
+                        const audio = new Audio(audioUrl);
+                        await audio.play();
+                        console.log("✅ ElevenLabs voice intro played successfully");
+                      }
+                    } else if (effect && effect.apiProvider === 'local') {
+                      // For Local Effects in AI voice generation, we need to create a text-to-speech first, then apply local processing
+                      const baseAudioUrl = await speakWithElevenLabs(voiceIntroText, '21m00Tcm4TlvDq8ikWAM', false);
+                      
+                      // Convert URL to Blob for processing
+                      const response = await fetch(baseAudioUrl);
+                      const baseAudioBlob = await response.blob();
+                      
+                      // Then apply local effect processing
+                      const localResult = await voiceProcessingService.processVoice(baseAudioBlob, effect);
+                      
+                      if (localResult.success && localResult.audioUrl) {
+                        const audio = new Audio(localResult.audioUrl);
+                        await audio.play();
+                        console.log("✅ Local Effect voice intro played successfully");
+                      } else {
+                        throw new Error(localResult.error || 'Local processing failed');
+                      }
+                    } else {
+                      // Fallback to default ElevenLabs voice
+                      const audioUrl = await speakWithElevenLabs(voiceIntroText, '21m00Tcm4TlvDq8ikWAM', false);
+                      if (audioUrl) {
+                        const audio = new Audio(audioUrl);
+                        await audio.play();
+                        console.log("✅ Default voice intro played successfully");
+                      }
                     }
                   } catch (error) {
                     console.error("❌ Error playing voice intro:", error);
@@ -932,12 +1010,45 @@ export default function ProfilePage() {
                     
                     try {
                       console.log(`🎵 Playing mood voice with voice: ${selectedVoice}`);
-                      const voiceId = getVoiceId(selectedVoice);
-                      const audioUrl = await speakWithElevenLabs(moodVoiceText, voiceId, false);
-                      if (audioUrl) {
-                        const audio = new Audio(audioUrl);
-                        await audio.play();
-                        console.log("✅ Mood voice played successfully");
+                      
+                      // Get voice effect configuration
+                      const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                      const availableEffects = voiceProcessingService.getAvailableEffects();
+                      const effect = availableEffects.find(e => e.id === selectedVoice);
+                      
+                      if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+                        const audioUrl = await speakWithElevenLabs(moodVoiceText, effect.voiceId, false);
+                        if (audioUrl) {
+                          const audio = new Audio(audioUrl);
+                          await audio.play();
+                          console.log("✅ ElevenLabs mood voice played successfully");
+                        }
+                      } else if (effect && effect.apiProvider === 'local') {
+                        // For Local Effects in AI voice generation, we need to create a text-to-speech first, then apply local processing
+                        const baseAudioUrl = await speakWithElevenLabs(moodVoiceText, '21m00Tcm4TlvDq8ikWAM', false);
+                        
+                        // Convert URL to Blob for processing
+                        const response = await fetch(baseAudioUrl);
+                        const baseAudioBlob = await response.blob();
+                        
+                        // Then apply local effect processing
+                        const localResult = await voiceProcessingService.processVoice(baseAudioBlob, effect);
+                        
+                        if (localResult.success && localResult.audioUrl) {
+                          const audio = new Audio(localResult.audioUrl);
+                          await audio.play();
+                          console.log("✅ Local Effect mood voice played successfully");
+                        } else {
+                          throw new Error(localResult.error || 'Local processing failed');
+                        }
+                      } else {
+                        // Fallback to default ElevenLabs voice
+                        const audioUrl = await speakWithElevenLabs(moodVoiceText, '21m00Tcm4TlvDq8ikWAM', false);
+                        if (audioUrl) {
+                          const audio = new Audio(audioUrl);
+                          await audio.play();
+                          console.log("✅ Default mood voice played successfully");
+                        }
                       }
                     } catch (error) {
                       console.error("❌ Error playing mood voice:", error);

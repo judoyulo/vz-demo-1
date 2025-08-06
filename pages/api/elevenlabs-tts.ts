@@ -1,5 +1,4 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getVoiceId } from '../../utils/voiceUtils';
 
 export default async function handler(
   req: NextApiRequest,

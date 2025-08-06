@@ -339,11 +339,51 @@ export const playUserVoice = async (
   userVoice: string,
   autoplay: boolean = false
 ): Promise<string | null> => {
-  const voiceId = getVoiceId(userVoice);
-  console.log(`🎤 Generating voice for ${userVoice} using voice ID: ${voiceId}`);
+  console.log(`🎤 Generating voice for ${userVoice}`);
+  
   try {
-    const audioUrl = await speakWithElevenLabs(text, voiceId, autoplay);
-    return audioUrl;
+    // Get voice effect configuration
+    const { voiceProcessingService } = await import('../lib/voiceProcessing');
+    const availableEffects = voiceProcessingService.getAvailableEffects();
+    const effect = availableEffects.find(e => e.id === userVoice);
+    
+    if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+      console.log(`🎤 Using ElevenLabs voice ID: ${effect.voiceId}`);
+      const audioUrl = await speakWithElevenLabs(text, effect.voiceId, autoplay);
+      return audioUrl;
+    } else if (effect && effect.apiProvider === 'local') {
+      console.log(`🎛️ Using Local Effect for AI voice generation: ${userVoice}`);
+      
+      // For Local Effects in AI voice generation, we need to create a text-to-speech first, then apply local processing
+      // First, generate base speech using a default voice
+      const baseAudioUrl = await speakWithElevenLabs(text, '21m00Tcm4TlvDq8ikWAM', false); // Use Rachel as base
+      
+      // Convert URL to Blob for processing
+      const response = await fetch(baseAudioUrl);
+      const baseAudioBlob = await response.blob();
+      
+      // Then apply local effect processing
+      const localResult = await voiceProcessingService.processVoice(baseAudioBlob, effect);
+      
+      if (localResult.success && localResult.audioUrl) {
+        console.log("✅ Local Effect AI voice generated successfully");
+        
+        if (autoplay) {
+          const audio = new Audio(localResult.audioUrl);
+          await audio.play();
+        }
+        
+        return localResult.audioUrl;
+      } else {
+        throw new Error(localResult.error || 'Local processing failed');
+      }
+    } else {
+      // Fallback to default ElevenLabs voice
+      console.log(`⚠️ No specific voice effect found for ${userVoice}, using default Aria`);
+      const voiceId = getVoiceId(userVoice);
+      const audioUrl = await speakWithElevenLabs(text, voiceId, autoplay);
+      return audioUrl;
+    }
   } catch (error) {
     console.error("Error in playUserVoice, returning null:", error);
     return null;

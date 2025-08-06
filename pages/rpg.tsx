@@ -439,39 +439,67 @@ const DialogueArea = ({ gameState, onSendMessage, onEndTurn, opponentProfile }: 
                         const transcribedText = await uploadSpeechToText(previewBlob);
                         console.log('🎵 [Preview] Transcribed text for preview:', transcribedText);
                         
-                        // Get user's voice profile for preview and use backend API
+                        // Get user's voice profile for preview and apply Local Effect to user's recording
                         const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
                         console.log('🎵 [Preview] User voice from localStorage:', userVoice);
-                        if (userVoice && userVoice.startsWith("elevenlabs-") && transcribedText && transcribedText.trim()) {
+                        if (userVoice) {
                             try {
-                                console.log('🎵 [Preview] Generating AI voice using backend API for:', userVoice);
-                                const { getVoiceId } = await import('../utils/voiceUtils');
-                                const voiceId = getVoiceId(userVoice);
+                                console.log('🎵 [Preview] Processing user recording with voice effect:', userVoice);
                                 
-                                const ttsResponse = await fetch('/api/elevenlabs-tts', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ 
-                                        text: transcribedText, 
-                                        voiceId: voiceId 
-                                    })
-                                });
+                                // Get voice effect configuration
+                                const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                                const availableEffects = voiceProcessingService.getAvailableEffects();
+                                const effect = availableEffects.find(e => e.id === userVoice);
                                 
-                                if (ttsResponse.ok) {
-                                    const audioBlob = await ttsResponse.blob();
-                                    const previewUrl = URL.createObjectURL(audioBlob);
-                                    setPreviewAudioUrl(previewUrl);
-                                    console.log('🎵 [Preview] AI voice generated for preview via backend API');
+                                if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+                                    console.log('🎵 [Preview] Using ElevenLabs voice for preview:', userVoice);
+                                    
+                                    // For ElevenLabs, we need to transcribe and regenerate
+                                    if (transcribedText && transcribedText.trim()) {
+                                        const ttsResponse = await fetch('/api/elevenlabs-tts', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ 
+                                                text: transcribedText, 
+                                                voiceId: effect.voiceId 
+                                            })
+                                        });
+                                        
+                                        if (ttsResponse.ok) {
+                                            const audioBlob = await ttsResponse.blob();
+                                            const previewUrl = URL.createObjectURL(audioBlob);
+                                            setPreviewAudioUrl(previewUrl);
+                                            console.log('🎵 [Preview] ElevenLabs voice generated for preview via backend API');
+                                        } else {
+                                            console.warn('🎵 [Preview] Backend TTS failed, using original recording');
+                                            setPreviewAudioUrl(audioDataUrl);
+                                        }
+                                    } else {
+                                        console.warn('🎵 [Preview] No transcribed text, using original recording');
+                                        setPreviewAudioUrl(audioDataUrl);
+                                    }
+                                } else if (effect && effect.apiProvider === 'local') {
+                                    console.log('🎛️ [Preview] Using Local Effect for user recording preview:', userVoice);
+                                    
+                                    // For Local Effects, apply directly to the original recording
+                                    const localResult = await voiceProcessingService.processVoice(audioBlob, effect);
+                                    
+                                    if (localResult.success && localResult.audioUrl) {
+                                        setPreviewAudioUrl(localResult.audioUrl);
+                                        console.log('🎵 [Preview] Local Effect applied to user recording for preview');
+                                    } else {
+                                        throw new Error(localResult.error || 'Local processing failed');
+                                    }
                                 } else {
-                                    console.warn('🎵 [Preview] Backend TTS failed, using original recording');
+                                    console.warn('🎵 [Preview] No specific voice effect found, using original recording');
                                     setPreviewAudioUrl(audioDataUrl);
                                 }
                             } catch (error) {
-                                console.error('🎵 [Preview] Error with backend API:', error);
+                                console.error('🎵 [Preview] Error with voice processing:', error);
                                 setPreviewAudioUrl(audioDataUrl);
                             }
                         } else {
-                            console.warn('🎵 [Preview] No ElevenLabs voice selected, using original recording');
+                            console.warn('🎵 [Preview] No voice selected, using original recording');
                             setPreviewAudioUrl(audioDataUrl);
                         }
                     } catch (error) {
@@ -825,28 +853,29 @@ export default function RPGPage() {
                 const { uploadSpeechToText } = await import('../utils/speechUtils');
                 textForAI = await uploadSpeechToText(audioBlob);
                 
-                // Step 2: Generate AI voice using the transcribed text with user's voice
+                // Step 2: Generate AI voice using the transcribed text (AI always uses default ElevenLabs voice)
                 if (textForAI && textForAI.trim()) {
                     console.log("🎤 Generating AI voice for transcribed text:", textForAI);
                     
-                    // Use user's selected voice for AI synthesis with voice processing service
-                    const userVoice = typeof window !== 'undefined' ? localStorage.getItem("selectedVoice") : null;
-                    const voiceToUse = userVoice || 'elevenlabs-aria'; // fallback voice
-                    console.log("🎵 [Send] User voice from localStorage:", userVoice);
-                    console.log("🎵 [Send] Using voice:", voiceToUse);
+                    // AI always uses default ElevenLabs voice, not user's selected voice
+                    const aiVoiceToUse = 'elevenlabs-aria'; // Default AI voice
+                    console.log("🎵 [Send] AI using default voice:", aiVoiceToUse);
                     
                     try {
-                        if (voiceToUse.startsWith("elevenlabs-")) {
-                            console.log('🎵 [Send] Generating AI voice using backend API for:', voiceToUse);
-                            const { getVoiceId } = await import('../utils/voiceUtils');
-                            const voiceId = getVoiceId(voiceToUse);
+                        // Get voice effect configuration for AI voice
+                        const { voiceProcessingService } = await import('../lib/voiceProcessing');
+                        const availableEffects = voiceProcessingService.getAvailableEffects();
+                        const effect = availableEffects.find(e => e.id === aiVoiceToUse);
+                        
+                        if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
+                            console.log('🎵 [Send] Generating AI voice using backend API for:', aiVoiceToUse);
                             
                             const ttsResponse = await fetch('/api/elevenlabs-tts', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ 
                                     text: textForAI, 
-                                    voiceId: voiceId 
+                                    voiceId: effect.voiceId 
                                 })
                             });
                             
@@ -858,17 +887,17 @@ export default function RPGPage() {
                                 console.warn("⚠️ Backend TTS failed, using fallback method");
                                 // Fallback to utils/voiceUtils method
                                 const { playUserVoice } = await import('../utils/voiceUtils');
-                                const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                                const fallbackUrl = await playUserVoice(textForAI, aiVoiceToUse, false);
                                 if (fallbackUrl) {
                                     aiVoiceUrl = fallbackUrl;
                                     console.log("✅ AI voice generated with fallback method");
                                 }
                             }
                         } else {
-                            console.warn('🎵 [Send] Non-ElevenLabs voice, using fallback method');
+                            console.warn('🎵 [Send] No specific AI voice effect found, using fallback method');
                             // Fallback to utils/voiceUtils method
                             const { playUserVoice } = await import('../utils/voiceUtils');
-                            const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                            const fallbackUrl = await playUserVoice(textForAI, aiVoiceToUse, false);
                             if (fallbackUrl) {
                                 aiVoiceUrl = fallbackUrl;
                                 console.log("✅ AI voice generated with fallback method");
@@ -878,7 +907,7 @@ export default function RPGPage() {
                         console.warn("⚠️ Voice processing service failed:", voiceProcessingError);
                         // Fallback to utils/voiceUtils method
                         const { playUserVoice } = await import('../utils/voiceUtils');
-                        const fallbackUrl = await playUserVoice(textForAI, voiceToUse, false);
+                        const fallbackUrl = await playUserVoice(textForAI, aiVoiceToUse, false);
                         if (fallbackUrl) {
                             aiVoiceUrl = fallbackUrl;
                             console.log("✅ AI voice generated with fallback method");
@@ -913,12 +942,35 @@ export default function RPGPage() {
     
             // Use backend API for AI response generation
             console.log('🤖 Using backend API for RPG AI response generation');
+            
+            // Create comprehensive personality prompt for the bot
+            const currentSideMission = gameState.sideMissions.player2.find(m => m.round === gameState.round);
+            const sideMissionInfo = currentSideMission ? `\nCURRENT SIDE MISSION: ${currentSideMission.description}` : '';
+            
+            const botPersonality = `You are ${botFullProfile.name}, a character in an RPG game. You must stay completely in character and respond as ${botFullProfile.name} would.
+
+GAME SCENARIO:
+You are in a stationary elevator with polished mahogany walls and a faint smell of ozone. There's another person here who seems just as confused as you. A disembodied voice announced: "The test begins now. Convince your partner to press their button first. Only one of you may proceed." There are two large, unlabeled buttons on the control panel.
+
+CHARACTER PROFILE:
+- Background: ${botFullProfile.background}
+- Social Role: ${botFullProfile.socialRole}
+- Personality: ${botFullProfile.personality}
+- Secret Backstory: ${botFullProfile.secretBackstory}
+- Main Mission: ${botFullProfile.mainMission}${sideMissionInfo}
+
+CURRENT ROUND: ${gameState.round} of ${gameState.maxRounds}
+
+IMPORTANT: You are in a high-stakes RPG scenario. Your responses must reflect your character's background, personality, and mission. Consider your secret backstory, main mission, and current side mission in every response. Be authentic to your character - don't break character or be overly helpful. Respond naturally as ${botFullProfile.name} would in this situation.
+
+RESPONSE STYLE: Keep your responses casual, conversational, and natural. Use everyday language, contractions, and speak like a real person in a tense situation. Don't be overly formal or robotic. Show emotion, hesitation, and human-like reactions.`;
+
             const response = await fetch('/api/ai-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: historyForAI[historyForAI.length - 1]?.content || 'Continue the conversation',
-                    personality: botFullProfile.name,
+                    personality: botPersonality,
                     conversationHistory: historyForAI.slice(0, -1) // Exclude the last message as it's included in message
                 })
             });
@@ -959,13 +1011,36 @@ export default function RPGPage() {
         console.log('🤖 Using backend API for RPG bot action selection');
         let botAction = ROUND_ACTIONS[gameState.round - 1][0].tag; // Default fallback
         try {
-            const actionPrompt = `Based on our conversation and your character, choose the best action from these options: ${ROUND_ACTIONS[gameState.round - 1].map(a => `${a.tag}: ${a.description}`).join(', ')}. Respond with only the action tag.`;
+            // Create comprehensive personality prompt for the bot action selection
+            const currentSideMission = gameState.sideMissions.player2.find(m => m.round === gameState.round);
+            const sideMissionInfo = currentSideMission ? `\nCURRENT SIDE MISSION: ${currentSideMission.description}` : '';
+            
+            const botPersonality = `You are ${botFullProfile.name}, a character in an RPG game. You must stay completely in character and respond as ${botFullProfile.name} would.
+
+GAME SCENARIO:
+You are in a stationary elevator with polished mahogany walls and a faint smell of ozone. There's another person here who seems just as confused as you. A disembodied voice announced: "The test begins now. Convince your partner to press their button first. Only one of you may proceed." There are two large, unlabeled buttons on the control panel.
+
+CHARACTER PROFILE:
+- Background: ${botFullProfile.background}
+- Social Role: ${botFullProfile.socialRole}
+- Personality: ${botFullProfile.personality}
+- Secret Backstory: ${botFullProfile.secretBackstory}
+- Main Mission: ${botFullProfile.mainMission}${sideMissionInfo}
+
+CURRENT ROUND: ${gameState.round} of ${gameState.maxRounds}
+
+IMPORTANT: You are in a high-stakes RPG scenario. Based on your character's background, personality, and mission, choose the best action from these options: ${ROUND_ACTIONS[gameState.round - 1].map(a => `${a.tag}: ${a.description}`).join(', ')}. 
+
+Consider your secret backstory, main mission, and current side mission when choosing. Respond with only the action tag.
+
+RESPONSE STYLE: Keep your responses casual, conversational, and natural. Use everyday language, contractions, and speak like a real person in a tense situation. Don't be overly formal or robotic. Show emotion, hesitation, and human-like reactions.`;
+
             const actionResponse = await fetch('/api/ai-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: actionPrompt,
-                    personality: botFullProfile.name,
+                    message: botPersonality,
+                    personality: botPersonality,
                     conversationHistory: gameState.chatLog.slice(-10).map(msg => ({
                         role: msg.senderId === 'player1' ? 'user' : 'assistant',
                         content: msg.type === 'text' ? msg.content : (msg.transcribedText || '[Voice message]')
