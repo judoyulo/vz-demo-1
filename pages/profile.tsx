@@ -483,8 +483,7 @@ export default function ProfilePage() {
         const effect = availableEffects.find(e => e.id === selectedVoice);
         
         if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
-          try {
-            console.log("🎭 Processing with AI voice using backend API:", selectedVoice);
+          console.log("🎭 Processing with AI voice using backend API:", selectedVoice);
             
             // Step 1: Transcribe the audio to text using OpenAI Whisper via backend
             console.log("🎤 Step 1: Transcribing audio to text...");
@@ -552,18 +551,6 @@ export default function ProfilePage() {
                   setIsRecordingMood(false);
                 }
               }
-          } catch (error) {
-            console.error("❌ Error processing with ElevenLabs voice:", error);
-            // Fallback to original audio
-            const url = URL.createObjectURL(blob);
-            if (type === "voice") {
-              setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-              setIsRecordingVoice(false);
-            } else {
-              setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-              setIsRecordingMood(false);
-            }
-          }
         } else if (effect && (effect.apiProvider as string) === 'local') {
           // Process with Local Effect
           try {
