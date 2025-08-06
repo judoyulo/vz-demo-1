@@ -1229,11 +1229,11 @@ GAME SCENARIO:
 You are in a stationary elevator with polished mahogany walls and a faint smell of ozone. There's another person here who seems just as confused as you. A disembodied voice announced: "The test begins now. Convince your partner to press their button first. Only one of you may proceed." There are two large, unlabeled buttons on the control panel.
 
 CHARACTER PROFILE:
-- Background: ${botFullProfile.role.background}
-- Social Role: ${botFullProfile.role.socialRole}
-- Personality: ${botFullProfile.role.personality}
-- Secret Backstory: ${botFullProfile.mission.secretBackstory}
-- Main Mission: ${botFullProfile.mission.mainMission}
+- Background: ${botFullProfile.background}
+- Social Role: ${botFullProfile.socialRole}
+- Personality: ${botFullProfile.personality}
+- Secret Backstory: ${botFullProfile.secretBackstory}
+- Main Mission: ${botFullProfile.mainMission}
 CURRENT SIDE MISSION: ${botSideMission?.description || 'None'}
 
 CURRENT ROUND: ${gameState.round} of ${gameState.maxRounds}
