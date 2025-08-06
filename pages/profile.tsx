@@ -552,6 +552,18 @@ export default function ProfilePage() {
                   setIsRecordingMood(false);
                 }
               }
+          } catch (error) {
+            console.error("❌ Error processing with ElevenLabs voice:", error);
+            // Fallback to original audio
+            const url = URL.createObjectURL(blob);
+            if (type === "voice") {
+              setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
+              setIsRecordingVoice(false);
+            } else {
+              setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
+              setIsRecordingMood(false);
+            }
+          }
         } else if (effect && (effect.apiProvider as string) === 'local') {
           // Process with Local Effect
           try {
@@ -605,18 +617,6 @@ export default function ProfilePage() {
 
         stream.getTracks().forEach(track => track.stop());
         console.log("🎤 Microphone released");
-      } catch (error) {
-        console.error("❌ Error in recording processing:", error);
-        // Fallback to original audio
-        const url = URL.createObjectURL(blob);
-        if (type === "voice") {
-          setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-          setIsRecordingVoice(false);
-        } else {
-          setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-          setIsRecordingMood(false);
-        }
-        stream.getTracks().forEach(track => track.stop());
       };
 
       recorder.onerror = event => {
