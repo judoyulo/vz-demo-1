@@ -1223,17 +1223,35 @@ RESPONSE STYLE: Keep your responses casual, conversational, and natural. Use eve
                             return { role: msg.senderId === 'player1' ? 'user' : 'assistant', content: msgContent };
                         }).slice(-10);
                         
-                        // Use backend API for AI response generation (opening message)
-                        console.log('🤖 Using backend API for RPG AI opening message generation');
-                        const response = await fetch('/api/ai-chat', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                message: "Start the conversation as your character",
-                                personality: botFullProfile.name,
-                                conversationHistory: historyForAI
-                            })
-                        });
+                                const botPersonality = `You are ${botFullProfile.name}, a character in an RPG game. You must stay completely in character and respond as ${botFullProfile.name} would.
+
+GAME SCENARIO:
+You are in a stationary elevator with polished mahogany walls and a faint smell of ozone. There's another person here who seems just as confused as you. A disembodied voice announced: "The test begins now. Convince your partner to press their button first. Only one of you may proceed." There are two large, unlabeled buttons on the control panel.
+
+CHARACTER PROFILE:
+- Background: ${botFullProfile.role.background}
+- Social Role: ${botFullProfile.role.socialRole}
+- Personality: ${botFullProfile.role.personality}
+- Secret Backstory: ${botFullProfile.mission.secretBackstory}
+- Main Mission: ${botFullProfile.mission.mainMission}
+CURRENT SIDE MISSION: ${botSideMission?.description || 'None'}
+
+CURRENT ROUND: ${gameState.round} of ${gameState.maxRounds}
+
+IMPORTANT: You are in a high-stakes RPG scenario. Your responses must reflect your character's background, personality, and mission. Consider your secret backstory, main mission, and current side mission in every response. Be authentic to your character - don't break character or be overly helpful. Respond naturally as ${botFullProfile.name} would in this situation.
+
+RESPONSE STYLE: Keep your responses casual, conversational, and natural. Use everyday language, contractions, and speak like a real person in a tense situation. Don't be overly formal or robotic. Show emotion, hesitation, and human-like reactions.`;
+                                
+                                console.log('🤖 Using backend API for RPG AI opening message generation');
+                                const response = await fetch('/api/ai-chat', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        message: "Start the conversation as your character. Your first line should be a compelling opening in this tense scenario.",
+                                        personality: botPersonality,
+                                        conversationHistory: historyForAI
+                                    })
+                                });
                         
                         let aiResponseText;
                         if (response.ok) {
