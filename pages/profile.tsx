@@ -474,10 +474,8 @@ export default function ProfilePage() {
         const blob = createAudioBlob(chunks);
         console.log("🎵 Audio blob created using unified utility");
 
-        // Process with AI voice using backend API (like RPG page)
         const selectedVoice = localStorage.getItem("selectedVoice") || "elevenlabs-aria";
         
-        // Get voice effect configuration
         const { voiceProcessingService } = await import("../lib/voiceProcessing");
         const availableEffects = voiceProcessingService.getAvailableEffects();
         const effect = availableEffects.find(e => e.id === selectedVoice);
@@ -485,8 +483,6 @@ export default function ProfilePage() {
         if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
           console.log("🎭 Processing with AI voice using backend API:", selectedVoice);
             
-            // Step 1: Transcribe the audio to text using OpenAI Whisper via backend
-            console.log("🎤 Step 1: Transcribing audio to text...");
             const formData = new FormData();
             formData.append('audio', blob, 'recording.mp4');
             
@@ -503,11 +499,7 @@ export default function ProfilePage() {
             const transcribedText = speechResult.text;
             console.log("✅ Transcribed text:", transcribedText.substring(0, 50) + '...');
             
-            // Step 2: Generate AI voice using the transcribed text via backend
-            console.log("🎵 Step 2: Generating AI voice...");
-            
             if (effect && effect.apiProvider === 'elevenlabs' && effect.voiceId) {
-              try {
                 const ttsResponse = await fetch('/api/elevenlabs-tts', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -539,21 +531,9 @@ export default function ProfilePage() {
                   const errorData = await ttsResponse.json();
                   throw new Error(errorData.error || 'Backend TTS API failed');
                 }
-              } catch (error) {
-                console.error("❌ Error processing with AI voice:", error);
-                // Fallback to original audio
-                const url = URL.createObjectURL(blob);
-                if (type === "voice") {
-                  setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-                  setIsRecordingVoice(false);
-                } else {
-                  setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-                  setIsRecordingMood(false);
-                }
-              }
+            }
         } else if (effect && (effect.apiProvider as string) === 'local') {
           // Process with Local Effect
-          try {
             console.log("🎛️ Processing with Local Effect:", selectedVoice);
             
             const localResult = await voiceProcessingService.processVoice(blob, effect);
@@ -577,18 +557,6 @@ export default function ProfilePage() {
             } else {
               throw new Error(localResult.error || 'Local processing failed');
             }
-          } catch (error) {
-            console.error("❌ Error processing with Local Effect:", error);
-            // Fallback to original audio
-            const url = URL.createObjectURL(blob);
-            if (type === "voice") {
-              setEditData(prev => ({ ...prev, voiceIntroUrl: url }));
-              setIsRecordingVoice(false);
-            } else {
-              setEditData(prev => ({ ...prev, moodVoiceUrl: url }));
-              setIsRecordingMood(false);
-            }
-          }
         } else {
           // No voice effect selected, use original audio
           console.log("⚠️ No voice effect selected, using original audio");
